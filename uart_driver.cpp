@@ -36,7 +36,7 @@ UartCore::UartCore(uint32_t baseAddr, uint16_t baudRate, uint32_t dataWidth, uin
     uint32_t error = UART_READ(baseAddress, ISR);
     if (error != 0) {
         /* Set standard configuration */ 
-        uint32_t dataCFR = UART_READ(baseAddress, CFR) | CFG_SET_STD_CONFIG;
+        uint32_t dataCFR = UART_READ(baseAddress, CFR) | CFR_SET_STD_CONFIG;
         UART_WRITE(baseAddress, CFR, dataCFR);
     }
 }
@@ -52,7 +52,7 @@ UartCore::UartCore(uint32_t baseAddr) {
     UART_setBaudRate((uint32_t) STD_BAUD_RATE);
 
     /* Set standard configuration */ 
-    uint32_t dataCFR = UART_READ(baseAddress, CFR) | CFG_SET_STD_CONFIG;
+    uint32_t dataCFR = UART_READ(baseAddress, CFR) | CFR_SET_STD_CONFIG;
     UART_WRITE(baseAddress, CFR, dataCFR);
 }
 
@@ -169,6 +169,11 @@ char UartCore::UART_readChar() {
 char* UartCore::UART_readString() {
     char* stringReceived;
 
+    /* Check if data stream mode is enabled */
+    if (!(UART_READ(baseAddress, CFR) & CFR_DATA_STREAM_MODE)) {
+        return;
+    }
+
     /*
      *  Keep reading until the end of the array or there's no data in the fifo anymore 
      *  or the last received character is a end of string character 
@@ -212,7 +217,7 @@ void UartCore::UART_sendConfigReq() {
 
 
 bool UartCore::UART_checkConfigReq() {
-    return UART_READ(baseAddress, CFR) & (~CFG_CONFIG_REQ_SLV);
+    return UART_READ(baseAddress, CFR) & (~CFR_CONFIG_REQ_SLV);
 }
 
 
@@ -291,7 +296,7 @@ uint32_t UartCore::UART_getBaudRate() {
 
 
 uint32_t UartCore::UART_getInterruptCode() {
-    return (UART_READ(baseAddress, ISR) & ISR_INTERRUPT_CODE) >> 4;
+    return (UART_READ(baseAddress, ISR) & ISR_INT_ID) >> 1;
 }
 
 
@@ -325,6 +330,22 @@ void UartCore::UART_setIntFrameError(bool enable) {
 void UartCore::UART_setIntConfigError(bool enable) {
     uint32_t dataIMR = (UART_READ(baseAddress, IMR) & (~IMR_CONFIG_ENABLE)) | ((uint32_t) enable << 3);
     UART_WRITE(baseAddress, IMR, dataIMR);
+}
+
+
+void UartCore::UART_deassertConfigReqMst() {
+    uint32_t dataCFR = (UART_READ(baseAddress, CFR) & (~CFR_CONFIG_REQ_MST));
+    UART_WRITE(baseAddress, CFR, dataCFR);
+}
+
+void UartCore::UART_deassertConfigReqSlv() {
+    uint32_t dataCFR = (UART_READ(baseAddress, CFR) & (~CFR_CONFIG_REQ_SLV));
+    UART_WRITE(baseAddress, CFR, dataCFR);
+}
+
+void UartCore::UART_setDataStreamMode(bool dataStreamMode) {
+    uint32_t dataCFR = ((UART_READ(baseAddress, CFR) & (~CFR_DATA_STREAM_MODE)) | ((uint32_t) dataStreamMode << 25));
+    UART_WRITE(baseAddress, CFR, dataCFR);
 }
 
 

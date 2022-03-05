@@ -47,33 +47,31 @@ module main_controller
 ( 
   input  logic         rst_n_i,
   input  logic         clk_i,
-  input  logic         baud_rt_tick_i,
-  input  logic         is_receiving_i,
   // Data
   input  data_packet_u data_rx_i,
   input  data_packet_u data_tx_i,
   // Error detection
   input  logic         frame_error_i,
   input  logic         parity_i,
-  input  logic         overrun_i,
-  input  uart_error_s  int_en_i,  
+  input  logic         overrun_i,  
   input  uart_error_s  error_i,       
   // FIFO status 
-  input  logic         rx_fifo_full_i,
   input  logic         rx_fifo_empty_i,
   input  logic         tx_fifo_empty_i,
-  input  logic         tx_fifo_full_i,
   input  logic         rx_fifo_read_i,
   input  logic         tx_fifo_write_i,
   // Configuration
   input  logic         config_req_slv_i,
   input  logic         config_req_mst_i,
-  input  logic         std_config_setup_i,
+  input  logic         std_config_i,
   input  uart_config_s config_i,
+  input  logic         data_stream_mode_i,
+  input  logic         CFR_en_i,
 
   output logic         CFR_en_o,
   output uart_config_s config_o,
   output logic         config_req_mst_o,
+  output logic         data_stream_mode_o,
   // FIFO operations
   output logic         rx_fifo_read_o,
   output logic         rx_fifo_write_o,
@@ -83,8 +81,7 @@ module main_controller
   output logic         data_rx_o,
   output logic [7:0]   data_tx_o,
   // Error
-  output uart_config_s error_o,
-  output logic         interrupt_o
+  output uart_config_s error_o
 );
 
 //------------------//
@@ -136,9 +133,26 @@ module main_controller
       
       always_comb begin : next_state_logic 
         // Default values 
-        CFR_en_o = 1'b0;
-        
         state[NXT] = state[CRT]; 
+
+        // Configuration signals
+        CFR_en_o = CFR_en_i;
+        config_o = config_i;
+        config_req_mst_o = config_req_mst_i;
+        data_stream_mode_o = data_stream_mode_i;
+
+        // FIFO signals
+        rx_fifo_read_o = rx_fifo_read_i;
+        rx_fifo_write_o = rx_fifo_write_i;
+        tx_fifo_read_o = tx_fifo_read_i;
+        tx_fifo_write_o = tx_fifo_write_i;
+
+        // Data signals
+        data_rx_o = data_rx_i;
+        data_tx_o = data_tx_o;
+
+        // Error signal
+        error_o = error_i; 
 
         case (state[CRT])
 
@@ -173,8 +187,7 @@ module main_controller
             end else if (config_req_mst_i) begin 
               // If the current device request a configuration setup (current device = MASTER)
               state[NXT] = WAIT_REQ_ACKN;
-              config_req_mst_o = 1'b0;
-            end else if (std_config_setup_i) begin 
+            end else if (std_config_i) begin 
               state[NXT] = STD_CONFIG; 
             end 
           end
@@ -206,10 +219,13 @@ module main_controller
           /*
            *  The device waits for configuration packets. The fifo's needs to be empty so other data packets
            *  won't be considered as configuration packets. For every packet received, the device must send
-           *  an acknowledgment. 
+           *  an acknowledgment. If there is a configuration request from the master device, the slave must
+           *  enable data stream mode so during the configuration the device doesn't interrupt everytime it 
+           *  receive a packet.
            */
           SETUP_SLAVE: begin 
             CFR_en_o = 1'b1;
+            data_stream_mode_o = 1'b1;
 
             // Wait until a configuration packet arrives, then send an acknowledge packet
             if (!tx_fifo_empty_i) begin 
@@ -287,8 +303,11 @@ module main_controller
 
           /*
            *  The device is waiting for the slave acknowledgment, the fifo must be empty. 
+           *  Enable data stream mode so the device doesn't interrupt everytime it receive a packet.
            */
           WAIT_ACK: begin 
+            data_stream_mode_o = 1'b1;
+
             if (!rx_fifo_empty_i) begin 
               rx_fifo_read_o = 1'b1;
               if (data_rx_i == ACKN_PKT) begin 
@@ -358,9 +377,5 @@ module main_controller
       end : parity_detection_logic
 
   assign error_o.frame = frame_error_i;
-
-  // Interrupt logic
-  assign interrupt_o = (int_en_i.configuration & error_i.configuration) | (int_en_i.parity & error_i.parity) | 
-                       (int_en_i.overrun & error_i.overrun) | (int_en_i.frame & error_i.frame);
 
 endmodule

@@ -59,11 +59,12 @@
  *  Register map definition 
  */
 #define CFR  0       /*  Configuration Register     */
-#define ISR  1       /*  Interrupt Status Register  */
-#define IMR  2       /*  Interrupt Mask Register    */
-#define RXR  3       /*  RX Register                */
-#define TXR  4       /*  TX Register                */
-#define IFR  5       /*  Info Register              */
+#define ESR  1       /*  Error Status Register      */
+#define ISR  2       /*  Interrupt Status Register  */
+#define IMR  3       /*  Interrupt Mask Register    */
+#define RXR  4       /*  RX Register                */
+#define TXR  5       /*  TX Register                */
+#define IFR  6       /*  Info Register              */
 
 
 class UartCore {
@@ -85,8 +86,9 @@ class UartCore {
          *  [19:18] | Parity configuration ID                       | R / W       | 
          *  [21:20] | Stop bits number configuration ID             | R / W       | 
          *  [22]    | Configuration request (MASTER)                | W           | 
-         *  [23]    | Configuration requested (SLAVE)               | R           |
+         *  [23]    | Configuration requested (SLAVE)               | W           |
          *  [24]    | Set standard configuration                    | W           |
+         *  [25]    | Data stream mode enable                       | W           |
          *  [31:25] | Reserved                                      | NONE        |
          * -------------------------------------------------------------------------
          */
@@ -96,35 +98,69 @@ class UartCore {
         CFR_PARITY_MODE = 0x000C0000,
         CFR_STOP_BITS_NUM = 0x00300000,
         CFR_CONFIG_REQ_MST = 0x00400000,
-        CFG_CONFIG_REQ_SLV = 0x00800000,
-        CFG_SET_STD_CONFIG = 0x01000000,
+        CFR_CONFIG_REQ_SLV = 0x00800000,
+        CFR_SET_STD_CONFIG = 0x01000000,
+        CFR_DATA_STREAM_MODE = 0x02000000,
 
         /*
-         *  ISR Register bit fields 
+         *  ESR Register bit fields 
          * --------------------------------------------------------
          *  Bits   | Description                   | Access mode |
          * --------------------------------------------------------
-         *  [0]    | Overflow error interrupt      | NONE        |
-         *  [1]    | Parity error interrupt        | NONE        |
-         *  [2]    | Frame error interrupt         | NONE        |
-         *  [3]    | Configuration error interrupt | NONE        |
-         *  [6:4]  | Interrupt code                | R           |
+         *  [0]    | Overrun error interrupt       | R           |
+         *  [1]    | Parity error interrupt        | R           |
+         *  [2]    | Frame error interrupt         | R           |
+         *  [3]    | Configuration error interrupt | R           |
          *  [31:4] | Reserved                      | NONE        |
          * --------------------------------------------------------
          */
         
-        ISR_INTERRUPT_CODE = 0x00000070,
+        ESR_OVERRUN_ERROR = 0x00000001,
+        ESR_PARITY_ERROR = 0x00000002,
+        ESR_FRAME_ERROR = 0x00000004,
+        ESR_CONFIG_ERROR = 0x00000008,
+
+        /*
+         *  ISR Register bit fields 
+         * -------------------------------------------------------------------------------------------------
+         *  Bits   | Description                   | Access mode |                                        |
+         * -------------------------------------------------------------------------------------------------
+         *  [0]    | Interrupt pending             | NONE        |                                        |
+         *  [2:1]  | Interrupt code                | R           |                                        |
+         *  [31:4] | Reserved                      | NONE        |                                        |
+         * -------------------------------------------------------------------------------------------------
+         *  Cause                 | Priority | ID  | Clears                                               | 
+         * -------------------------------------------------------------------------------------------------
+         *  None                  | None     | 000 | None                                                 |
+         * -------------------------------------------------------------------------------------------------
+         *  One or more error     | 1        | 001 | For configuration error send another config request. |
+         *                        |          |     | For overrun error, read the ESR register.            |
+         *                        |          |     | For other errors just read the data.                 |
+         * -------------------------------------------------------------------------------------------------
+         *  Data received ready   | 3        | 010 | Standard mode: read RXR.                             |
+         *                        |          |     | Data stream mode: read RXR till the buffer is empty. |
+         * -------------------------------------------------------------------------------------------------
+         *  Receiver fifo full    | 2        | 011 | Standard mode: read RXR.                             |
+         *                        |          |     | Data stream mode: read RXR till the buffer is empty. | 
+         * -------------------------------------------------------------------------------------------------   
+         *  Configuration done    | 3        | 100 | Deassert one of the two config request bit in CFR    |
+         * -------------------------------------------------------------------------------------------------                            
+         */
+
+        ISR_INT_PEND = 0x00000001,
+        ISR_INT_ID = 0x00000006,
 
         /* 
          *  IMR Register bit fields 
          * ---------------------------------------------------------------
          *  Bits   | Description                          | Access mode |
          * ---------------------------------------------------------------
-         *  [0]    | Overflow error interrupt enable      | W / R       |
-         *  [1]    | Parity error interrupt enable        | W / R       |
-         *  [2]    | Frame error interrupt enable         | W / R       |
-         *  [3]    | Configuration error interrupt enable | W / R       | 
-         *  [31:4] | Reserved                             | NONE        |
+         *  [0]    | Overflow error interrupt enable      | W           |
+         *  [1]    | Parity error interrupt enable        | W           |
+         *  [2]    | Frame error interrupt enable         | W           |
+         *  [3]    | Configuration error interrupt enable | W           |
+         *  [4]    | Data rx ready interrupt enable       | W           |  
+         *  [31:5] | Reserved                             | NONE        |
          * --------------------------------------------------------------- 
          */ 
 
@@ -132,6 +168,7 @@ class UartCore {
         IMR_PARITY_ENABLE = 0x00000002,
         IMR_FRAME_ENABLE = 0x00000003,
         IMR_CONFIG_ENABLE = 0x00000004,
+        IMR_DATA_RDY_ENABLE = 0x00000010,
 
         /* 
          *  RXR Register bit fields 
@@ -179,6 +216,15 @@ class UartCore {
         IFR_CDI = 0x0000FFFF,
         IFR_PROD_NUM = 0x00FF0000,
         IFR_DEV_NUM = 0xFF000000
+    };
+
+    /* Interrupt code */
+    enum {
+        INT_NONE = 0,
+        INT_ERR = 1,
+        INT_RXD_RDY = 2,
+        INT_RX_BUF_FULL = 3,
+        INT_CONFIG_DONE = 4
     };
 
     /*  Data width configuration code  */
@@ -230,14 +276,16 @@ class UartCore {
         uint32_t getBaseAddress();  
 
 
-        //-----------------//
-        //  SET BAUD RATE  //
-        //-----------------//
+        //-------------//
+        //  BAUD RATE  //
+        //-------------//
 
         /*
          *  Set the baud rate given a specified system clock frequency.
          */
         void UART_setBaudRate(uint32_t baudRate);   
+
+        uint32_t UART_getBaudRate();
 
 
         //------------------//
@@ -292,7 +340,7 @@ class UartCore {
 
         /*
          *  Read a stream of bytes, return it as an array, the dimension of the stream is specified
-         *  by the 'size' parameter. 
+         *  by the 'size' parameter. The function use is legal only if the UART is in data stream mode.
          */
         uint32_t* UART_readByteStream(size_t size); 
 
@@ -312,7 +360,7 @@ class UartCore {
         char UART_readChar();   
 
         /*  
-         *  Transmit a string.  
+         *  Transmit a string. The function use is legal only if the UART is in data stream mode.  
          */
         void UART_sendString(const char *string);   
 
@@ -330,15 +378,25 @@ class UartCore {
 
         uint32_t UART_getParityMode();  
 
-        uint32_t UART_getStopBitsNumber();  
-
-        uint32_t UART_getBaudRate();   
+        uint32_t UART_getStopBitsNumber();     
 
         void UART_setDataWidth(uint32_t dataWidth);
 
         void UART_setStopBitsNumber(uint32_t stopBitsNumber); 
 
         void UART_setParityMode(uint32_t parityMode); 
+
+        /*
+         *  Enable or disable UART data stream mode.
+         */
+        void UART_setDataStreamMode(bool dataStreamMode);
+
+        /*
+         *  Deassert the configuration request bit to clear the related interrupt.
+         */
+        void UART_deassertConfigReqMst();
+
+        void UART_deassertConfigReqSlv();
 
 
         //-------------//
@@ -356,6 +414,8 @@ class UartCore {
         void UART_setIntParityError(bool enable);   
 
         void UART_setIntConfigError(bool enable); 
+
+        void UART_setIntDataRxRdy(bool enable);
 
         uint32_t UART_getInterruptCode(); 
 
