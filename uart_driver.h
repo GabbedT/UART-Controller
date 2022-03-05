@@ -89,7 +89,8 @@ class UartCore {
          *  [23]    | Configuration requested (SLAVE)               | W           |
          *  [24]    | Set standard configuration                    | W           |
          *  [25]    | Data stream mode enable                       | W           |
-         *  [31:25] | Reserved                                      | NONE        |
+         *  [26]    | Acknowledge request                           | W           |
+         *  [31:27] | Reserved                                      | NONE        |
          * -------------------------------------------------------------------------
          */
         
@@ -101,6 +102,7 @@ class UartCore {
         CFR_CONFIG_REQ_SLV = 0x00800000,
         CFR_SET_STD_CONFIG = 0x01000000,
         CFR_DATA_STREAM_MODE = 0x02000000,
+        CFR_ACKN_REQ = 0x04000000,
 
         /*
          *  ESR Register bit fields 
@@ -122,29 +124,31 @@ class UartCore {
 
         /*
          *  ISR Register bit fields 
-         * -------------------------------------------------------------------------------------------------
-         *  Bits   | Description                   | Access mode |                                        |
-         * -------------------------------------------------------------------------------------------------
-         *  [0]    | Interrupt pending             | NONE        |                                        |
-         *  [2:1]  | Interrupt code                | R           |                                        |
-         *  [31:4] | Reserved                      | NONE        |                                        |
-         * -------------------------------------------------------------------------------------------------
-         *  Cause                 | Priority | ID  | Clears                                               | 
-         * -------------------------------------------------------------------------------------------------
-         *  None                  | None     | 000 | None                                                 |
-         * -------------------------------------------------------------------------------------------------
-         *  One or more error     | 1        | 001 | For configuration error send another config request. |
-         *                        |          |     | For overrun error, read the ESR register.            |
-         *                        |          |     | For other errors just read the data.                 |
-         * -------------------------------------------------------------------------------------------------
-         *  Data received ready   | 3        | 010 | Standard mode: read RXR.                             |
-         *                        |          |     | Data stream mode: read RXR till the buffer is empty. |
-         * -------------------------------------------------------------------------------------------------
-         *  Receiver fifo full    | 2        | 011 | Standard mode: read RXR.                             |
-         *                        |          |     | Data stream mode: read RXR till the buffer is empty. | 
-         * -------------------------------------------------------------------------------------------------   
-         *  Configuration done    | 3        | 100 | Deassert one of the two config request bit in CFR    |
-         * -------------------------------------------------------------------------------------------------                            
+         * ---------------------------------------------------------------------------------------------------
+         *  Bits   | Description               | Access mode |                                              |
+         * ---------------------------------------------------------------------------------------------------
+         *  [0]    | Interrupt pending         | NONE        |                                              |
+         *  [2:1]  | Interrupt code            | R           |                                              |
+         *  [31:4] | Reserved                  | NONE        |                                              |
+         * ---------------------------------------------------------------------------------------------------
+         *  Cause                   | Priority | ID  | Clears                                               | 
+         * ---------------------------------------------------------------------------------------------------
+         *  None                    | None     | 000 | None                                                 |
+         * ---------------------------------------------------------------------------------------------------
+         *  One or more error       | 1        | 001 | For configuration error send another config request. |
+         *                          |          |     | For overrun error, read the ESR register.            |
+         *                          |          |     | For other errors just read the data.                 |
+         * ---------------------------------------------------------------------------------------------------
+         *  Data received ready     | 3        | 010 | Standard mode: read RXR.                             |
+         *                          |          |     | Data stream mode: read RXR till the buffer is empty. |
+         * ---------------------------------------------------------------------------------------------------
+         *  Receiver fifo full      | 2        | 011 | Standard mode: read RXR.                             |
+         *                          |          |     | Data stream mode: read RXR till the buffer is empty. | 
+         * ---------------------------------------------------------------------------------------------------   
+         *  Configuration done      | 3        | 100 | Deassert one of the two config request bit in CFR.   |
+         * --------------------------------------------------------------------------------------------------- 
+         *  Requested configuration | 2        | 101 | Acknowledge the request or let the request expire.   |
+         * ---------------------------------------------------------------------------------------------------                         
          */
 
         ISR_INT_PEND = 0x00000001,
@@ -221,34 +225,35 @@ class UartCore {
     /* Interrupt code */
     enum {
         INT_NONE = 0,
-        INT_ERR = 1,
+        INT_ERROR = 1,
         INT_RXD_RDY = 2,
         INT_RX_BUF_FULL = 3,
-        INT_CONFIG_DONE = 4
+        INT_CONFIG_DONE = 4,
+        INT_REQ_CONFIG = 5
     };
 
     /*  Data width configuration code  */
     enum {
-        DW_BIT5 = 0b00,
-        DW_BIT6 = 0b01,
-        DW_BIT7 = 0b10,
-        DW_BIT8 = 0b11
+        DW_BIT5 = 0,
+        DW_BIT6 = 1,
+        DW_BIT7 = 2,
+        DW_BIT8 = 3
     };
 
     /*  Stop bits number configuration code  */
     enum {
-        SB_BIT1 = 0b00,
-        SB_BIT15 = 0b01,
-        SB_RESERVED = 0b10,
-        SB_BIT2 = 0b11 
+        SB_BIT1 = 0,
+        SB_BIT15 = 1,
+        SB_RESERVED = 2,
+        SB_BIT2 = 3
     };
 
     /*  Parity mode configuration code  */
     enum {
-        DISABLED1 = 0b00,
-        EVEN = 0b01,
-        DISABLED2 = 0b10,
-        ODD = 0b11
+        DISABLED1 = 0,
+        EVEN = 1,
+        DISABLED2 = 2,
+        ODD = 3
     };
     
 
@@ -405,6 +410,8 @@ class UartCore {
 
         /*
          *  Enable or disable the interrupt generation on a specified error occurance. 
+         *  Receiver fifo full, confguration done and requested configuration interrupt
+         *  CAN'T be disabled.
          */
 
         void UART_setIntOverrunError(bool enable);     
@@ -416,6 +423,7 @@ class UartCore {
         void UART_setIntConfigError(bool enable); 
 
         void UART_setIntDataRxRdy(bool enable);
+
 
         uint32_t UART_getInterruptCode(); 
 
@@ -440,28 +448,6 @@ class UartCore {
          *  Tell to the UART to send a configuration request signal (in this case the device acts like a master).
          */
         void UART_sendConfigReq();      
-
-        /*
-         *  Check if the other device has requested a configuration 
-         */
-        bool UART_checkConfigReq();     
-
-
-        //-------------------------//
-        //  CONFIGURATION PACKETS  //
-        //-------------------------//
-
-        /*
-         *  Send a configuration packet, option is specified in function's parameter. 
-         *  These functions are legal only when the device is in configuration mode.
-         */
-        void UART_sendDataWidthPacket(uint32_t configCode);     
-
-        void UART_sendParityModePacket(uint32_t configCode);    
-
-        void UART_sendStopBitsNumberPacket(uint32_t configCode);    
-
-        void UART_sendEndConfigurationPacket();   
 
 };
 
