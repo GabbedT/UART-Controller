@@ -385,16 +385,10 @@ class UartCore {
 
         uint32_t UART_getStopBitsNumber();     
 
-        void UART_setDataWidth(uint32_t dataWidth);
-
-        void UART_setStopBitsNumber(uint32_t stopBitsNumber); 
-
-        void UART_setParityMode(uint32_t parityMode); 
-
         /*
          *  Enable or disable UART data stream mode.
          */
-        void UART_setDataStreamMode(bool dataStreamMode);
+        void UART_setDataStreamMode(bool enable);
 
         /*
          *  Deassert the configuration request bit to clear the related interrupt.
@@ -447,7 +441,17 @@ class UartCore {
         /*
          *  Tell to the UART to send a configuration request signal (in this case the device acts like a master).
          */
-        void UART_sendConfigReq();      
+        void UART_sendConfigReq();   
+        
+        /* 
+         *  Configuration set function, they must be used only in the construction.
+         */ 
+        void UART_setDataWidth(uint32_t dataWidth);
+
+        void UART_setStopBitsNumber(uint32_t stopBitsNumber); 
+
+        void UART_setParityMode(uint32_t parityMode); 
+
 
 };
 
