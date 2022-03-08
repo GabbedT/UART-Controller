@@ -92,7 +92,7 @@ typedef struct {
     uint32_t TXR;
     /*  Info Register              */
     uint32_t IFR;
-} uart_t;
+} volatile uart_t;
 
 /* Used to refer to a paricular uart through a pointer */ 
 uart_t *handle; 
