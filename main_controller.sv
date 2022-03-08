@@ -107,9 +107,9 @@ module main_controller
   // stay 2 cycles in the IDLE stage when resetted
   logic rst_n_dly;
 
-      always_ff @(posedge clk_i) begin
+      always_ff @(posedge clk_i) begin : delay_register
         rst_n_dly <= rst_n_i;
-      end
+      end : delay_register
 
       always_ff @(posedge clk_i) begin : fsm_state_register
         if (!rst_n_i) begin 
@@ -121,7 +121,7 @@ module main_controller
 
   // Number of times the configuration failed
   logic [CRT:NXT][1:0] config_failed;
-
+  
       // Count the number of times the configuration has failed (max 3 times)
       always_ff @(posedge clk_i) begin : fail_config_register
         if (!rst_n_i) begin 
@@ -157,7 +157,7 @@ module main_controller
         case (state[CRT])
 
           /*
-           *  Reset the device, set the configuration to the default configuration
+           *  Reset the device, set the configuration to the default configuration.
            */
           RESET: begin 
             CFR_en_o = 1'b1;
@@ -265,7 +265,7 @@ module main_controller
             
             // Send ackowledge packet 
             tx_fifo_write_o = 1'b1;
-            data_tx_o = ACKN_PKT;
+            data_tx_o = assemble_packet(END_CONFIGURATION, 2'b00);
           end
 
           /*

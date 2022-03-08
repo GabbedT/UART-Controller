@@ -3,9 +3,32 @@
 
 package UART_pkg;
 
-//------------//
-// PARAMETERS //
-//------------//
+//----------------------//
+//  GENERAL PARAMETERS  //
+//----------------------//
+
+  // System clock frequency in Hz
+  localparam SYSTEM_CLOCK_FREQ = 100_000_000;
+
+  // Number of words stored in the buffers
+  localparam TX_FIFO_DEPTH = 128;
+  localparam RX_FIFO_DEPTH = 128;
+
+  // Interrupt id
+  localparam INT_NONE        = 4'b0000;
+  localparam INT_CONFIG_FAIL = 4'b0001;
+  localparam INT_OVERRUN     = 4'b0010;
+  localparam INT_PARITY      = 4'b0100;
+  localparam INT_FRAME       = 4'b1000;
+  localparam INT_RXD_RDY     = 4'b0011;
+  localparam INT_RX_FULL     = 4'b0101;
+  localparam INT_CONFIG_DONE = 4'b0110;
+  localparam INT_CONFIG_REQ  = 4'b0111;
+
+
+//------------------------------//
+//  MAIN CONTROLLER PARAMETERS  //
+//------------------------------//
 
   localparam IDLE = 1;
 
@@ -21,14 +44,8 @@ package UART_pkg;
   localparam NXT = 1;
   localparam CRT = 0;
 
-  // 10 ms in s 
-  localparam T_10MS = 10 * (10**(-3));
-
   // 50 ms in s 
   localparam T_50MS = 50 * (10**(-3));
-
-  // System clock frequency in Hz
-  localparam SYSTEM_CLOCK_FREQ = 100_000_000;
   
   // How many clock cycles does it need to reach 10 / 50 ms 
   // based on a specific system clock
@@ -36,6 +53,7 @@ package UART_pkg;
   localparam COUNT_50MS = SYSTEM_CLOCK_FREQ * T_50MS;
 
   localparam ACKN_PKT = 8'hFF;
+
 
 //-------------//
 // DATA PACKET //
@@ -52,7 +70,7 @@ package UART_pkg;
   typedef struct packed {
     logic [1:0] id;
     logic [1:0] option;
-    logic [2:0] dont_care;
+    logic [3:0] dont_care;
   } configuration_packet_s;
 
   // The packet can have 2 different rapresentation thus it's expressed as union
@@ -62,6 +80,10 @@ package UART_pkg;
     // Configuration state
     configuration_packet_s cfg_packet;
   } data_packet_u;
+
+  function logic [7:0] assemble_packet(input logic [1:0] id, input logic [1:0] option);
+    return {4'b0, option, id};
+  endfunction : assemble_packet
   
 //----------------------------//
 // PACKET WIDTH CONFIGURATION //
@@ -119,21 +141,21 @@ package UART_pkg;
   localparam STD_PARITY_MODE = EVEN;
   
   typedef struct packed {
-      // If the UART doesn't see a stop bit
-      logic frame;
-      // If the receiver's buffer is full and the UART
-      // is receiving data
-      logic overrun;
-      // If parity doesn't match
-      logic parity;
-      // If the uart has recieved an illegal config packet
-      logic configuration;
+    // If the UART doesn't see a stop bit
+    logic frame;
+    // If the receiver's buffer is full and the UART
+    // is receiving data
+    logic overrun;
+    // If parity doesn't match
+    logic parity;
+    // If the uart has recieved an illegal config packet
+    logic configuration;
   } uart_error_s;
 
   typedef struct packed {
-      logic [1:0] data_width;
-      logic [1:0] stop_bits;
-      logic [1:0] parity_mode;
+    logic [1:0] data_width;
+    logic [1:0] stop_bits;
+    logic [1:0] parity_mode;
   } uart_config_s;
 
 //------------------------------//
