@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include "uart_driver1.h"
+#include "uart_driver.h"
 #include "uart_regmap.h"
 
 //------------------//
@@ -20,7 +20,7 @@ void uart_init(uint32_t baudRate, uartDataWidth_t dataWidth, uartParityMode_t pa
     uart_setBaudRate(baudRate);
 
     /* Wait until the buffers are empty */
-    while (uart_rxEmpty() && uart_txEmpty()) { }
+    while ((!uart_rxEmpty()) && (!uart_txEmpty())) { }
 
     /* Clear the configuration bit fields */
     uint32_t dataSTR = handle->STR;
@@ -35,8 +35,11 @@ void uart_init(uint32_t baudRate, uartDataWidth_t dataWidth, uartParityMode_t pa
 
     /* In this case the device will be the master, initiate a configuration process
      * by sending a configuration request. The device hardware will take care of the
-     * devices intercommunication process. */
-    handle->CTR |= CFG_REQ_MST;   
+     * devices intercommunication process. Enable data stream mode so the device 
+     * doesn't interrupt everytime. */
+    uart_setDataStreamMode(true);
+    uart_sendConfigReq();   
+    uart_setDataStreamMode(false);
 }   
 
 
