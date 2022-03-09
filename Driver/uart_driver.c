@@ -35,9 +35,7 @@ void uart_init(uint32_t baudRate, uartDataWidth_t dataWidth, uartParityMode_t pa
 
     /* In this case the device will be the master, initiate a configuration process
      * by sending a configuration request. The device hardware will take care of the
-     * devices intercommunication process. Enable data stream mode so the device 
-     * doesn't interrupt everytime. */
-    uart_setDataStreamMode(true);
+     * devices intercommunication process. */
     uart_sendConfigReq();   
     uart_setDataStreamMode(false);
 }   
