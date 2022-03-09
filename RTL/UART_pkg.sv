@@ -44,8 +44,9 @@ package UART_pkg;
   localparam NXT = 1;
   localparam CRT = 0;
 
-  // 50 ms in s 
+  // Milliseconds in seconds 
   localparam T_50MS = 50 * (10**(-3));
+  localparam T_10MS = 10 * (10**(-3));
   
   // How many clock cycles does it need to reach 10 / 50 ms 
   // based on a specific system clock
@@ -165,26 +166,20 @@ package UART_pkg;
   typedef enum logic [3:0] {
       // After reset signal, every register is resetted in standard configuration
       RESET,
+      // Send configuration request 
+      CFG_REQ_MST,
       // If the device sees the initialization signal (10ms RX low) then send an acknowledgment packet
-      SEND_ACKN,
+      SEND_ACKN_SLV,
       // State before entering the main state
       END_PROCESS,
       // Drive TX low to send the initialization signal
-      SETUP_SLAVE,
+      SETUP_SLV,
       // Send data width packet 
-      SETUP_MASTER_DW,
-      // Send parity mode packet
-      SETUP_MASTER_PM,
-      // Send stop bits number packet
-      SETUP_MASTER_SB,
+      SETUP_MST,
       // Wait request acknowledgment
-      WAIT_REQ_ACKN,
+      WAIT_REQ_ACKN_MST,
       // Wait for the acknowledgment data width packet
-      WAIT_ACK_DW,
-      // Wait for the acknowledgment parity mode packet
-      WAIT_ACK_PM,
-      // Wait for the acknowledgment stop bits packet
-      WAIT_ACK_SB,
+      WAIT_ACKN_MST,
       // Setup the device in standard configuration  
       STD_CONFIG,
       // UART's main state

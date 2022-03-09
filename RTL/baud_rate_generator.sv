@@ -82,13 +82,13 @@ module baud_rate_generator #(
   end : counter_16_br
 
   // Counter that ticks one time every 16 ticks
-  always_ff @(posedge clk_i) begin : counter_br
+  always_ff @(posedge clk_i) begin : counter_baud_rt
     if (!rst_n_i) begin 
       counter_br <= 4'b0;
     end else if (counter_ov == 1) begin 
       counter_br <= counter_br + 1'b1;
     end 
-  end : counter_br
+  end : counter_baud_rt
 
   // The counter counts from 0 to divisor value so it actually counts divisor + 1 times
   // thus the clock generated should tick only when it reach the value 1 
