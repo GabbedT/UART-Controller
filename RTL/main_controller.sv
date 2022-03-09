@@ -68,7 +68,7 @@ module main_controller
   input  logic         data_stream_mode_i,
   input  logic         CFR_en_i,
 
-  output logic         CFR_en_o,
+  o_DWutput logic         STR_en,
   output uart_config_s config_o,
   output logic         config_req_mst_o,
   output logic         data_stream_mode_o,
@@ -90,16 +90,16 @@ module main_controller
 
   main_control_fsm_e [NXT:CRT] state;
 
-  logic [$clog2(COUNT_50MS) - 1:0] counter_50ms;
+  logic [NXT:CRT][$clog2(COUNT_50MS) - 1:0] counter_50ms;
 
       // Counter to 50ms  
       always_ff @(posedge clk_i) begin : ms50_counter
         if (!rst_n_i) begin   
+          counter_50ms[CRT] <= 'b0;
+        end else if (counter_50ms[CRT] == COUNT_50MS) begin  
           counter_50ms <= 'b0;
-        end else if (state[CRT] == WAIT_ACK) begin 
-          counter_50ms <= counter_50ms + 1;
-        end else if (counter_50ms == COUNT_50MS) begin  
-          counter_50ms <= 'b0;
+        end else begin
+          counter_50ms[CRT] <= counter_50ms[NXT];
         end
       end : ms50_counter
 
@@ -135,8 +135,8 @@ module main_controller
         // Default values 
         state[NXT] = state[CRT]; 
 
-        // Configuration signals
-        CFR_en_o = CFR_en_i;
+        // Configu_DWration signals
+        STR_en = CFR_en_i;
         config_o = config_i;
         config_req_mst_o = config_req_mst_i;
         data_stream_mode_o = data_stream_mode_i;
@@ -159,8 +159,8 @@ module main_controller
           /*
            *  Reset the device, set the configuration to the default configuration.
            */
-          RESET: begin 
-            CFR_en_o = 1'b1;
+          RESET: begin_DW 
+            STR_en = 1'b1;
             config_o.data_width = STD_DATA_WIDTH; 
             config_o.parity_mode = STD_PARITY_MODE; 
             config_o.stop_bits = STD_STOP_BITS; 
@@ -173,6 +173,7 @@ module main_controller
             tx_fifo_write_o = 1'b0;
 
             state[NXT] = MAIN;
+            counter_50ms[NXT] = 'b0;
           end
 
           /*  
@@ -200,13 +201,15 @@ module main_controller
            *  configuration.
            */
           WAIT_REQ_ACKN: begin 
+            counter_50ms[NXT] = counter_50ms[CRT] + 1'b1;
+
             if (config_failed[CRT] == 2'd3) begin 
               error_o.configuration = 1'b1;
               config_failed[NXT] = 2'b0;
               state[NXT] = STD_CONFIG;
             end
 
-            if (counter_50ms < COUNT_50MS) begin
+            if (counter_50ms[CRT] < COUNT_50MS) begin
               if (data_rx_i == ACKN_PKT) begin 
                 state[NXT] = SETUP_MASTER;
               end
@@ -223,8 +226,8 @@ module main_controller
            *  enable data stream mode so during the configuration the device doesn't interrupt everytime it 
            *  receive a packet.
            */
-          SETUP_SLAVE: begin 
-            CFR_en_o = 1'b1;
+          SETUP_SLAVE:_DW begin 
+            STR_en = 1'b1;
             data_stream_mode_o = 1'b1;
 
             // Wait until a configuration packet arrives, then send an acknowledge packet
@@ -235,8 +238,8 @@ module main_controller
             // If there is an error in the packet received, raise a configuration error
             // and use the standard configuration
             case (data_rx_i.id)
-              END_CONFIGURATION: begin 
-                CFR_en_o = 1'b0;
+              END_CONFIGUR_DWATION: begin 
+                STR_en = 1'b0;
                 state[NXT] = END_PROCESS;
               end
 
@@ -281,25 +284,45 @@ module main_controller
           end
 
           /*
-           *  The device will receive from the CPU configuration packets, during this state the data is 
-           *  checked to be sure to not send any illegal packet to the slave. The illegal packet will
-           *  be replaced with a packet containing the standard configuration for that field. 
+           *  The device will send a data width configuration packet to the slave device.
            */
-          SETUP_MASTER: begin 
-            CFR_en_o = 1'b1;
-
-            if (tx_fifo_write_i) begin 
-              state[NXT] = WAIT_ACK;
-            end
-
-            if ((data_tx_i.id == PARITY_MODE_ID) & ((data_rx_i.option == DISABLED_1) | (data_rx_i.option == DISABLED_2))) begin 
-              config_o.parity_mode = STD_PARITY_MODE;
-              error_o.configuration = 1'b1;
-            end else if ((data_tx_i.id == STOP_BITS_ID) & (data_rx_i.option == RESERVED)) begin 
-              config_o.stop_bits = STD_STOP_BITS;
-              error_o.configuration = 1'b1;
-            end 
+          SETUP_MASTER_DW: begin 
+            data_tx_o = assemble_packet(DATA_WIDTH_ID, config_i.data_width);
+            state[NXT] = WAIT_ACK_DW;
           end
+
+          /*
+           *  The device will send a parity mode configuration packet to the slave device.
+           */  
+          SETUP_MASTER_PM: begin
+            data_tx_o = assemble_packet(DATA_WIDTH_ID, config_i.data_width);
+            state[NXT] = WAIT_ACK_PM;
+          end  
+
+          /*
+           *  The device is waiting for the slave acknowledgment, the fifo must be empty. 
+           *  Enable data stream mode so the device doesn't interrupt everytime it receive a packet.
+           */
+          WAIT_ACK_DW: begin
+            counter_50ms[NXT] = counter_50ms[CRT] + 1'b1;
+
+            if (counter_50ms[CRT] < MS50_COUNTER) begin : dw_ackn_check
+              /* When data arrives, read the fifo */
+              if (!rx_fifo_empty_i) begin
+                rx_fifo_read_o = 1'b1;
+              end 
+
+              /* Go to the next state only if the acknowledge packet has been received */
+              if (data_rx_i == ACKN_PKT) begin
+                state[NXT] = SETUP_MASTER_PM;
+              end 
+            end else begin : dw_ackn_fail
+              /* If the packet hasn't been received in time, raise a configuration error and set
+               * standard configuration */
+              state[NXT] = STD_CONFIG;
+              config_o.configuration = 1'b1;
+            end : dw_ackn_fail
+          end      
 
           /*
            *  The device is waiting for the slave acknowledgment, the fifo must be empty. 
@@ -322,8 +345,8 @@ module main_controller
           /*
            *  Setup the standard configuration.
            */
-          STD_CONFIG: begin 
-            CFR_en_o = 1'b1;
+          STD_CONFIG: _DWbegin 
+            STR_en = 1'b1;
             config_o.data_width = STD_DATA_WIDTH;
             config_o.parity_mode = STD_PARITY_MODE;
             config_o.stop_bits = STD_STOP_BITS;

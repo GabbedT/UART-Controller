@@ -162,7 +162,7 @@ package UART_pkg;
 // MAIN CONTROL FSM ENUMERATION //
 //------------------------------//
 
-  typedef enum logic [2:0] {
+  typedef enum logic [3:0] {
       // After reset signal, every register is resetted in standard configuration
       RESET,
       // If the device sees the initialization signal (10ms RX low) then send an acknowledgment packet
@@ -171,10 +171,20 @@ package UART_pkg;
       END_PROCESS,
       // Drive TX low to send the initialization signal
       SETUP_SLAVE,
-      SETUP_MASTER,
+      // Send data width packet 
+      SETUP_MASTER_DW,
+      // Send parity mode packet
+      SETUP_MASTER_PM,
+      // Send stop bits number packet
+      SETUP_MASTER_SB,
+      // Wait request acknowledgment
       WAIT_REQ_ACKN,
-      // Wait for the acknowledgment packet
-      WAIT_ACK,
+      // Wait for the acknowledgment data width packet
+      WAIT_ACK_DW,
+      // Wait for the acknowledgment parity mode packet
+      WAIT_ACK_PM,
+      // Wait for the acknowledgment stop bits packet
+      WAIT_ACK_SB,
       // Setup the device in standard configuration  
       STD_CONFIG,
       // UART's main state
