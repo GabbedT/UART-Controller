@@ -41,7 +41,8 @@
  *  [1]     | Configuration requested (SLAVE)               | R           |
  *  [2]     | Set standard configuration                    | W           |
  *  [3]     | Acknowledge configuration request             | W           |
- *  [31:4]  | Reserved                                      | NONE        |
+ *  [4]     | Configuration done                            | R           |
+ *  [31:5]  | Reserved                                      | NONE        |
  * -------------------------------------------------------------------------
  */
 
@@ -49,6 +50,7 @@
 #define CFG_REQ_SLV  0x00000002
 #define STD_CONFIG   0x00000004
 #define ACKN_CFG     0x00000008
+#define CFG_DONE     0x00000010
 
 
 //----------------//
@@ -85,10 +87,8 @@
  * ----------------------------------------------------------------------------------------------------
  *  Receiver fifo full      | 2        | 0101 | Standard mode: read RXR.                             |
  *                          |          |      | Data stream mode: read RXR till the buffer is empty. | 
- * ----------------------------------------------------------------------------------------------------
- *  Configuration done      | 2        | 0110 | Acknowledge the interrupt                            |
  * ----------------------------------------------------------------------------------------------------  
- *  Requested configuration | 2        | 0111 | Acknowledge the request or let the request expire.   |
+ *  Requested configuration | 2        | 0110 | Acknowledge the request or let the request expire.   |
  * ----------------------------------------------------------------------------------------------------                        
  */
 
