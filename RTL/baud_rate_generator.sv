@@ -49,7 +49,7 @@
 
 module baud_rate_generator #(
 
-  // Divisor's number of bits used to calculate the baud rate
+  /* Divisor's number of bits used to calculate the baud rate */
   parameter DVSR_WIDTH = 16
 ) 
 (
@@ -65,23 +65,23 @@ module baud_rate_generator #(
 // DATAPATH //
 //----------//
 
-  // Counter for oversampling
+  /* Counter for oversampling */
   logic [DVSR_WIDTH - 1:0] counter_ov;
 
-  // Counter for baudrate
+  /* Counter for baudrate */
   logic [3:0] counter_br;
 
-  // Counter that ticks 16 times the baudrate
+  /* Counter that ticks 16 times the baudrate */
   always_ff @(posedge clk_i) begin : counter_16_br
     if (!rst_n_i) begin 
       counter_ov <= 'b0; 
     end else begin  
-      // Reset if the counter reach the divisor value
+      /* Reset if the counter reach the divisor value */
       counter_ov <= (counter_ov == divisor_i) ? 'b0 : counter_ov + 1'b1;
     end
   end : counter_16_br
 
-  // Counter that ticks one time every 16 ticks
+  /* Counter that ticks one time every 16 ticks */
   always_ff @(posedge clk_i) begin : counter_baud_rt
     if (!rst_n_i) begin 
       counter_br <= 4'b0;
@@ -90,8 +90,8 @@ module baud_rate_generator #(
     end 
   end : counter_baud_rt
 
-  // The counter counts from 0 to divisor value so it actually counts divisor + 1 times
-  // thus the clock generated should tick only when it reach the value 1 
+  /* The counter counts from 0 to divisor value so it actually counts divisor + 1 times
+   * thus the clock generated should tick only when it reach the value 1 */
   assign ov_baud_rt_o = (counter_ov == 1);
 
   assign baud_rt_tick_o = (counter_br == 4'd15);
