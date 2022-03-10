@@ -74,6 +74,7 @@ module main_controller
   output uart_config_s config_o,
   output logic         config_req_mst_o,
   output logic         data_stream_mode_o,
+  output logic         configuration_done_o,
   /* FIFO operations */
   output logic         rx_fifo_read_o,
   output logic         tx_fifo_write_o,
@@ -159,6 +160,7 @@ module main_controller
         config_req_mst_o = config_req_mst_i;
         data_stream_mode_o = data_stream_mode_i;
         error_o.configuration = (interrupt_ackn_i) ? 1'b0 : configuration_error_i;
+        configuration_done_o = 1'b1;
 
         /* FIFO signals */
         rx_fifo_read_o = rx_fifo_read_i;
@@ -178,6 +180,7 @@ module main_controller
             config_req_mst_o = 1'b0;
             rx_fifo_read_o = 1'b0;
             tx_fifo_write_o = 1'b0;
+            configuration_done_o = 1'b0;
 
             state[NXT] = STD_CONFIG;
           end
@@ -190,6 +193,7 @@ module main_controller
             config_o.data_width = STD_DATA_WIDTH;
             config_o.parity_mode = STD_PARITY_MODE;
             config_o.stop_bits = STD_STOP_BITS;
+            configuration_done_o = 1'b0;
 
             state[NXT] = MAIN;
           end
@@ -205,9 +209,11 @@ module main_controller
             /* If the other device requested a configuration setup (current device = SLAVE) */
             if (config_req_slv_i) begin 
               state[NXT] = SEND_ACKN_SLV;
+              configuration_done_o = 1'b0;
             end else if (config_req_mst_i) begin 
               /* If the current device request a configuration setup (current device = MASTER) */
               state[NXT] = CFG_REQ_MST;
+              configuration_done_o = 1'b0;
             end else if (std_config_i) begin 
               state[NXT] = STD_CONFIG; 
             end 
