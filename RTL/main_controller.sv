@@ -270,7 +270,7 @@ module main_controller
               DW_TYPE:   data_tx_o = assemble_packet(DATA_WIDTH_ID, config_i.data_width);
               PM_TYPE:   data_tx_o = assemble_packet(PARITY_MODE_ID, config_i.parity_mode);
               SB_TYPE:   data_tx_o = assemble_packet(STOP_BITS_ID, config_i.stop_bits);
-              EC_TYPE:   data_tx_o = assemble_packet(END_CONFIGURATION, 2'b00);
+              EC_TYPE:   data_tx_o = assemble_packet(END_CONFIGURATION_ID, 2'b00);
             endcase
           end
 
