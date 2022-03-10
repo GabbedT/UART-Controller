@@ -174,7 +174,7 @@ module main_controller
            *  Reset the device, set the configuration to the default configuration.
            */
           RESET: begin 
-            // Don't perform any operation
+            /* Don't perform any operation */
             config_req_mst_o = 1'b0;
             rx_fifo_read_o = 1'b0;
             tx_fifo_write_o = 1'b0;
