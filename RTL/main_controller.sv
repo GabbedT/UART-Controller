@@ -349,11 +349,11 @@ module main_controller
            */
           SEND_ACKN_SLV: begin 
             if (tx_done_i) begin 
-              state[NXT] = SETUP_SLV;
-            end 
-
-            if (config_packet_type[CRT] == EC_TYPE) begin 
-              state[NXT] = MAIN;
+              if (config_packet_type[CRT] == EC_TYPE) begin 
+                state[NXT] = MAIN;
+              end else begin 
+                state[NXT] = SETUP_SLV;
+              end
             end
             
             /* Send ackowledge packet */
