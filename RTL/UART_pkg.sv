@@ -7,14 +7,14 @@ package UART_pkg;
 //  GENERAL PARAMETERS  //
 //----------------------//
 
-  // System clock frequency in Hz
+  /* System clock frequency in Hz */
   localparam SYSTEM_CLOCK_FREQ = 100_000_000;
 
-  // Number of words stored in the buffers
+  /* Number of words stored in the buffers */
   localparam TX_FIFO_DEPTH = 128;
   localparam RX_FIFO_DEPTH = 128;
 
-  // Interrupt id
+  /* Interrupt id */
   localparam INT_NONE        = 4'b0000;
   localparam INT_CONFIG_FAIL = 4'b0001;
   localparam INT_OVERRUN     = 4'b0010;
@@ -32,24 +32,24 @@ package UART_pkg;
 
   localparam IDLE = 1;
 
-  // If the signal is driven directly by the controller or by the input
+  /* If the signal is driven directly by the controller or by the input */
   localparam DRV_CONTROLLER = 1;
   localparam DRV_INPUT = 0;
 
-  // The UART's type 
+  /* The UART's type */ 
   localparam MASTER = 1;
   localparam SLAVE = 0;
   
-  // FSM next and current state
+  /* FSM next and current state */
   localparam NXT = 1;
   localparam CRT = 0;
 
-  // Milliseconds in seconds 
+  /* Milliseconds in seconds */ 
   localparam T_50MS = 50 * (10**(-3));
   localparam T_10MS = 10 * (10**(-3));
   
-  // How many clock cycles does it need to reach 10 / 50 ms 
-  // based on a specific system clock
+  /* How many clock cycles does it need to reach 10 / 50 ms */ 
+  /* based on a specific system clock */
   localparam COUNT_10MS = SYSTEM_CLOCK_FREQ * T_10MS;
   localparam COUNT_50MS = SYSTEM_CLOCK_FREQ * T_50MS;
 
@@ -60,13 +60,15 @@ package UART_pkg;
 // DATA PACKET //
 //-------------//
 
-  // Normally the data packet is just composed by 8 bit of data.
-  // Data packet received from UART Host to CONFIGURE the device. 
-  // is composed by 3 parts:
-  //
-  // COMMAND ID: bits [1:0] specifies the setting to configure
-  // OPTION:     bits [3:2] select an option
-  // DON'T CARE: bits [7:4] those bits are simply ignored
+  /*
+   * Normally the data packet is just composed by 8 bit of data.
+   * Data packet received from UART Host to CONFIGURE the device. 
+   * is composed by 3 parts:
+   *
+   * COMMAND ID: bits [1:0] specifies the setting to configure
+   * OPTION:     bits [3:2] select an option
+   * DON'T CARE: bits [7:4] those bits are simply ignored
+   */
 
   typedef struct packed {
     logic [1:0] id;
@@ -74,11 +76,11 @@ package UART_pkg;
     logic [3:0] dont_care;
   } configuration_packet_s;
 
-  // The packet can have 2 different rapresentation thus it's expressed as union
+  /* The packet can have 2 different rapresentation thus it's expressed as union */
   typedef union packed {
-    // Main state
+    /* Main state */
     logic [7:0] packet;
-    // Configuration state
+    /* Configuration state */
     configuration_packet_s cfg_packet;
   } data_packet_u;
 
@@ -90,10 +92,10 @@ package UART_pkg;
 // PACKET WIDTH CONFIGURATION //
 //----------------------------//
 
-  // Command ID
+  /* Command ID */
   localparam logic [1:0] DATA_WIDTH_ID = 2'b01;
 
-  // Configuration code
+  /* Configuration code */
   localparam logic [1:0] DW_5BIT = 2'b00;
   localparam logic [1:0] DW_6BIT = 2'b01;
   localparam logic [1:0] DW_7BIT = 2'b10;
@@ -103,10 +105,10 @@ package UART_pkg;
 // STOP BITS CONFIGURATION //
 //-------------------------//
 
-  // Command ID
+  /* Command ID */
   localparam logic [1:0] STOP_BITS_ID = 2'b10;
   
-  // Configuration code
+  /* Configuration code */
   localparam logic [1:0] SB_1BIT  = 2'b00;
   localparam logic [1:0] SB_15BIT = 2'b01;
   localparam logic [1:0] RESERVED = 2'b10;
@@ -116,10 +118,10 @@ package UART_pkg;
 // PARITY MODE CONFIGURATION //
 //---------------------------//
 
-  // Command ID
+  /* Command ID */
   localparam logic [1:0] PARITY_MODE_ID = 2'b11;
 
-  // Configuration code
+  /* Configuration code */
   localparam logic [1:0] DISABLED_1  = 2'b00;
   localparam logic [1:0] EVEN        = 2'b01;
   localparam logic [1:0] DISABLED_2  = 2'b10;
@@ -129,27 +131,26 @@ package UART_pkg;
 // END CONFIGURATION PROCESS //
 //---------------------------//
 
-  // Packet
-  localparam logic [1:0] END_CONFIGURATION = 2'b00;
+  localparam logic [1:0] END_CONFIGURATION_ID = 2'b00;
 
 //-------------------------//
 // ERROR AND CONFIGURATION //
 //-------------------------//
 
-  // Standard configuration
+  /* Standard configuration */
   localparam STD_DATA_WIDTH = DW_8BIT;
   localparam STD_STOP_BITS = SB_2BIT;
   localparam STD_PARITY_MODE = EVEN;
   
   typedef struct packed {
-    // If the UART doesn't see a stop bit
+    /* If the UART doesn't see a stop bit */
     logic frame;
-    // If the receiver's buffer is full and the UART
-    // is receiving data
+    /* If the receiver's buffer is full and the UART
+     * is receiving data */
     logic overrun;
-    // If parity doesn't match
+    /* If parity doesn't match */
     logic parity;
-    // If the uart has recieved an illegal config packet
+    /* If the uart has recieved an illegal config packet */
     logic configuration;
   } uart_error_s;
 
@@ -164,25 +165,25 @@ package UART_pkg;
 //------------------------------//
 
   typedef enum logic [3:0] {
-      // After reset signal, every register is resetted in standard configuration
+      /* After reset signal, every register is resetted in standard configuration */
       RESET,
-      // Send configuration request 
+      /* Send configuration request */ 
       CFG_REQ_MST,
-      // If the device sees the initialization signal (10ms RX low) then send an acknowledgment packet
+      /* If the device sees the initialization signal (10ms RX low) then send an acknowledgment packet */
       SEND_ACKN_SLV,
-      // State before entering the main state
+      /* State before entering the main state */
       END_PROCESS,
-      // Drive TX low to send the initialization signal
+      /* Drive TX low to send the initialization signal */
       SETUP_SLV,
-      // Send data width packet 
+      /* Send data width packet */ 
       SETUP_MST,
-      // Wait request acknowledgment
+      /* Wait request acknowledgment */
       WAIT_REQ_ACKN_MST,
-      // Wait for the acknowledgment data width packet
+      /* Wait for the acknowledgment data width packet */
       WAIT_ACKN_MST,
-      // Setup the device in standard configuration  
+      /* Setup the device in standard configuration */
       STD_CONFIG,
-      // UART's main state
+      /* UART's main state */
       MAIN
   } main_control_fsm_e;
 
