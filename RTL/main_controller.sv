@@ -334,11 +334,9 @@ module main_controller
              * and use the standard configuration */
             if (counter_50ms[CRT] != COUNT_50MS) begin
               case (data_rx_i.cfg_packet.id)
-                DATA_WIDTH_ID: config_o.data_width = data_rx_i.cfg_packet.option;
-
+                DATA_WIDTH_ID:  config_o.data_width = data_rx_i.cfg_packet.option;
                 PARITY_MODE_ID: config_o.parity_mode = data_rx_i.cfg_packet.option;
-
-                STOP_BITS_ID: config_o.stop_bits = data_rx_i.cfg_packet.option;
+                STOP_BITS_ID:   config_o.stop_bits = data_rx_i.cfg_packet.option;
               endcase
             end else begin 
               state[NXT] = STD_CONFIG;
@@ -385,26 +383,17 @@ module main_controller
          */
           
         case (config_i.data_width)
-
           DW_5BIT:  parity = ^data_rx_i[4:0];
-
           DW_6BIT:  parity = ^data_rx_i[5:0];
-
           DW_7BIT:  parity = ^data_rx_i[6:0];
-
           DW_8BIT:  parity = ^data_rx_i;
-
         endcase
 
         /* Select ODD or EVEN parity */
         case (config_i.parity_mode)
-
           EVEN:    error_o.parity = parity_i != (parity ^ 1'b0);
-
           ODD:     error_o.parity = parity_i != (parity ^ 1'b1);
-
           default: error_o.parity = 1'b0;
-            
         endcase
       end : parity_detection_logic
 
