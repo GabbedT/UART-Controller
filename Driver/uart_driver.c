@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include "uart_driver.h"
+#include "uart.h"
 #include "uart_regmap.h"
 
 //------------------//
@@ -13,17 +13,19 @@
 
 void uart_initStd() {
     /* Set standard configuration bit */
-    handle->CTR |= STD_CONFIG;
+    gHandle->CTR |= STD_CONFIG;
 }
 
-void uart_init(uint32_t baudRate, uartDataWidth_t dataWidth, uartParityMode_t parityMode,uartStopBits_t stopBits) {
+void uart_init(uint32_t baudRate, uartDataWidth_t dataWidth, uartParityMode_t parityMode,uartStopBits_t stopBits, bool dataStreamMode, uint32_t threshold) {
     uart_setBaudRate(baudRate);
+    uart_setDataStreamMode(dataStreamMode);
+    uart_setThresholdBuf(threshold);
 
     /* Wait until the buffers are empty */
     while ((!uart_rxEmpty()) && (!uart_txEmpty())) { }
 
     /* Clear the configuration bit fields */
-    uint32_t dataSTR = handle->STR;
+    uint32_t dataSTR = gHandle->STR;
     dataSTR &= ~(DATA_WIDTH | PARITY_MODE | STOP_BITS);
 
     /* Write parameters in the right register field */
@@ -31,13 +33,13 @@ void uart_init(uint32_t baudRate, uartDataWidth_t dataWidth, uartParityMode_t pa
     dataSTR |= parityMode << 18;
     dataSTR |= stopBits << 20;
 
-    handle->STR = dataSTR;
+    gHandle->STR = dataSTR;
 
     /* In this case the device will be the master, initiate a configuration process
      * by sending a configuration request. The device hardware will take care of the
      * devices intercommunication process.*/
     uart_sendConfigReq(); 
-    do { } while (!((bool)(handle->CTR & CFG_DONE)));
+    do { } while (!((bool)(gHandle->CTR & CFG_DONE)));
     uart_setDataStreamMode(false);
 }   
 
@@ -48,16 +50,16 @@ void uart_init(uint32_t baudRate, uartDataWidth_t dataWidth, uartParityMode_t pa
 
 void uart_setBaudRate(uint32_t baudRate) {
     /* Clear the divisor bit field */
-    uint32_t dataCTR = handle->CTR;
+    uint32_t dataCTR = gHandle->CTR;
     dataCTR &= ~(DIVISOR); 
 
     /* Calculate the divisor value to obtain the desired baud rate */
     dataCTR |= (uint16_t)((SYS_CLOCK_FREQ / (16 * baudRate)) - 1);
-    handle->CTR = dataCTR;
+    gHandle->CTR = dataCTR;
 }
 
 uint32_t uart_getBaudRate() {
-    uint16_t divisor = handle->CTR & DIVISOR;
+    uint16_t divisor = gHandle->CTR & DIVISOR;
     return SYS_CLOCK_FREQ / (16 * (divisor + 1));
 }
 
@@ -67,20 +69,20 @@ uint32_t uart_getBaudRate() {
 //----------------//
 
 bool uart_rxFull() {
-    return handle->RXR & RX_FULL;
+    return gHandle->RXR & RX_FULL;
 }
 
 bool uart_rxEmpty() {
-    return handle->RXR & RX_EMPTY;
+    return gHandle->RXR & RX_EMPTY;
 }
 
 const uint8_t uart_readByte() {
-    return handle->RXR & DATA_RX;
+    return gHandle->RXR & DATA_RX;
 }
 
 const uint8_t* uart_readByteStream(size_t size) {
     /* Check if byte stream mode is enabled */
-    if (!(handle->STR & DATA_STREAM_MODE)) {
+    if (!(gHandle->STR & DATA_STREAM_MODE)) {
         return NULL;
     } 
 
@@ -94,7 +96,7 @@ const uint8_t* uart_readByteStream(size_t size) {
 
     /* Keep reading until the end of the array or there's no data in the fifo anymore */  
     while (uart_rxEmpty() || (byteStream < (byteStream + size))) {
-        *byteStream = handle->RXR & DATA_RX;
+        *byteStream = gHandle->RXR & DATA_RX;
         ++byteStream;    
     }
 
@@ -103,7 +105,7 @@ const uint8_t* uart_readByteStream(size_t size) {
 
 const char* UART_readString() {
     /* Check if byte stream mode is enabled */
-    if (!(handle->STR & DATA_STREAM_MODE)) {
+    if (!(gHandle->STR & DATA_STREAM_MODE)) {
         return NULL;
     } 
 
@@ -116,7 +118,7 @@ const char* UART_readString() {
         stringRx = (char*) malloc(sizeof(char));
 
         /* Store character and increment the pointer */
-        *stringRx = handle->RXR & DATA_RX;
+        *stringRx = gHandle->RXR & DATA_RX;
         ++stringRx;    
     } while ((UART_RxEmpty()) || (*(stringRx - 1) == '\0'));
 
@@ -129,11 +131,11 @@ const char* UART_readString() {
 //----------------//
 
 bool uart_txFull() {
-    return handle->TXR & TX_FULL;
+    return gHandle->TXR & TX_FULL;
 }
 
 bool uart_txEmpty() {
-    return handle->TXR & TX_EMPTY;
+    return gHandle->TXR & TX_EMPTY;
 }
 
 void uart_sendByte(uint8_t data) {
@@ -141,7 +143,7 @@ void uart_sendByte(uint8_t data) {
     while (uart_txFull()) { }
 
     /* Write the parameter in the tx data field */ 
-    handle->TXR = (handle->TXR & ~(DATA_TX)) | data;
+    gHandle->TXR = (gHandle->TXR & ~(DATA_TX)) | data;
 }
 
 void uart_sendByteStream(const uint8_t *stream, size_t size) {
@@ -151,7 +153,7 @@ void uart_sendByteStream(const uint8_t *stream, size_t size) {
         while (uart_txFull()) { }
 
         /* Write in the data tx field the function's parameter */
-        handle->TXR = (handle->TXR & ~(DATA_TX)) | (*stream);
+        gHandle->TXR = (gHandle->TXR & ~(DATA_TX)) | (*stream);
         ++stream;
     }
 }
@@ -163,7 +165,7 @@ void uart_sendString(const char *string) {
         while (uart_txFull()) { }
 
         /* Write in the data tx field the function's parameter */
-        handle->TXR = (handle->TXR & ~(DATA_TX)) | ((uint8_t) *string);
+        gHandle->TXR = (gHandle->TXR & ~(DATA_TX)) | ((uint8_t) *string);
         ++string;
     }
 }
@@ -174,35 +176,46 @@ void uart_sendString(const char *string) {
 //----------------------//
 
 uint32_t uart_getDataWidth() {
-    return handle->STR & DATA_WIDTH;
+    return (gHandle->STR & DATA_WIDTH) >> 16;
 }
 
 uint32_t uart_getParityMode() {
-    return handle->STR & PARITY_MODE;
+    return (gHandle->STR & PARITY_MODE) >> 18;
 }
 
 uint32_t uart_getStopBits() {
-    return handle->STR & STOP_BITS;
+    return (gHandle->STR & STOP_BITS) >> 20;
 }
 
 bool uart_getDataStreamMode() {
-    return handle->STR & DATA_STREAM_MODE;
+    return (gHandle->STR & DATA_STREAM_MODE) >> 22;
+}
+
+uint32_t uart_getThresholdBuf() {
+    return (gHandle->STR & FIFO_THRESHOLD) >> 23; 
 }
 
 void uart_setDataWidth(uint32_t dataWidth) {
-    handle->STR = (handle->STR & ~(DATA_WIDTH)) | (dataWidth << 16);
+    gHandle->STR = (gHandle->STR & ~(DATA_WIDTH)) | (dataWidth << 16);
 }
 
 void uart_setParityMode(uint32_t parityMode) {
-    handle->STR = (handle->STR & ~(PARITY_MODE)) | (parityMode << 18);
+    gHandle->STR = (gHandle->STR & ~(PARITY_MODE)) | (parityMode << 18);
 }
 
 void uart_setStopBits(uint32_t stopBits) {
-    handle->STR = (handle->STR & ~(STOP_BITS)) | (stopBits << 20);
+    gHandle->STR = (gHandle->STR & ~(STOP_BITS)) | (stopBits << 20);
 }
 
 void uart_setDataStreamMode(bool dataStreamMode) {
-    handle->STR = (handle->STR & ~(DATA_STREAM_MODE)) | (dataStreamMode << 22);
+    gHandle->STR = (gHandle->STR & ~(DATA_STREAM_MODE)) | (dataStreamMode << 22);
+}
+
+void uart_setThresholdBuf(uint32_t threshold) {
+    if (threshold >= RX_FIFO_SIZE) {
+        return;
+    }
+    gHandle->STR = (gHandle->STR & ~(FIFO_THRESHOLD)) | (threshold << 23);
 }
 
 
@@ -211,15 +224,15 @@ void uart_setDataStreamMode(bool dataStreamMode) {
 //---------------//
 
 void uart_sendConfigReq() {
-    handle->CTR |= CFG_REQ_MST;
+    gHandle->CTR |= CFG_REQ_MST;
 }
 
 void uart_setStdConfig() {
-    handle->CTR |= STD_CONFIG;
+    gHandle->CTR |= STD_CONFIG;
 }
 
 void uart_acknConfigReq() {
-    handle->CTR |= ACKN_CFG;
+    gHandle->CTR |= ACKN_CFG;
 }
 
 
@@ -228,23 +241,77 @@ void uart_acknConfigReq() {
 //-------------//
 
 void uart_enableIntOverrun(bool enable) {
-    handle->IMR = (handle->IMR & ~(INT_OVR_EN)) | enable;
+    gHandle->IMR = (gHandle->IMR & ~(INT_OVR_EN)) | enable;
 }
 
 void uart_enableIntParity(bool enable) {
-    handle->IMR = (handle->IMR & ~(INT_PAR_EN)) | (enable << 1);
+    gHandle->IMR = (gHandle->IMR & ~(INT_PAR_EN)) | (enable << 1);
 }
 
 void uart_enableIntFrame(bool enable) {
-    handle->IMR = (handle->IMR & ~(INT_FRM_EN)) | (enable << 2);
+    gHandle->IMR = (gHandle->IMR & ~(INT_FRM_EN)) | (enable << 2);
 }
 
 void uart_enableIntRxDRdy(bool enable) {
-    handle->IMR = (handle->IMR & ~(INT_RXD_EN)) | (enable << 3);
+    gHandle->IMR = (gHandle->IMR & ~(INT_RXD_EN)) | (enable << 3);
 }
 
 uint32_t uart_getIntID() {
-    return (handle->ISR & INT_ID) >> 1;
+    return (gHandle->ISR & INT_ID) >> 1;
+}
+
+/*
+ *  Modify this routine if the processor needs to do some operations before accessing
+ *  the device.
+ */ 
+void uart_interruptServiceRoutine() {
+    uartInterruptID_t intID = (uartInterruptID_t) uart_getID();
+    uint8_t trashValue;
+
+    if (intID == INT_CONFIG_FAIL) {
+        uint32_t baudRate = uart_getBaudRate();
+        uint32_t dataWidth = uart_getDataWidth();
+        uint32_t parityMode = uart_getParityMode();
+        uint32_t stopBits = uart_getStopBits();
+        uint32_t threshold = uart_getThresholdBuf();
+        bool dataStreamMode = uart_getDataStreamMode();
+
+        uart_init(baudRate, dataWidth, parityMode, stopBits, dataStreamMode, threshold);
+        return;
+    }
+
+    if (intID == INT_OVERRUN) {
+        trashValue = uart_readByte();
+        return;
+    }
+
+    if (intID == INT_PARITY) {
+        trashValue = uart_readByte();
+        return;
+    }
+
+    if (intID == INT_CONFIG_REQ) {
+        gHandle->CTR |= ACKN_CFG; 
+        return;
+    }
+
+    if (intID == INT_RX_FULL) {
+        if (uart_getDataStreamMode()) {
+            *gDataStrmRxInt = uart_readByteStream(RX_FIFO_SIZE);
+        } else {
+            gDataRxInt = uart_readByte();
+        }
+        return;
+    }
+
+    if (intID == INT_RXD_RDY) {
+        if (uart_getDataStreamMode()) {
+            *gDataStrmRxInt = uart_readByteStream(uart_getThresholdBuf());
+        } else {
+            gDataRxInt = uart_readByte();
+        }
+        return;
+    }
 }
 
 
@@ -253,11 +320,11 @@ uint32_t uart_getIntID() {
 //---------------//
 
 uint32_t UART_getProductNumber() {
-    return (handle->IFR & PRODUCT_NUMBER) >> 16;
+    return (gHandle->IFR & PRODUCT_NUMBER) >> 16;
 }
 
 uint32_t UART_getDeviceNumber() {
-    return (handle->IFR & DEVICE_NUMBER) >> 24;
+    return (gHandle->IFR & DEVICE_NUMBER) >> 24;
 }
 
 #endif
