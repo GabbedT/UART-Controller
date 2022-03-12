@@ -1,5 +1,5 @@
-#ifndef UART_BITMAP_INCLUDED
-#define UART_BITMAP_INCLUDED
+#ifndef UART_REGMAP_INCLUDED
+#define UART_REGMAP_INCLUDED
 
 //----------------//
 //  STR REGISTER  //
@@ -76,11 +76,11 @@
  * ----------------------------------------------------------------------------------------------------
  *  Configuration error     | 1        | 0001 | Send another configuration request                   |
  * ----------------------------------------------------------------------------------------------------
- *  Overrun error           | 1        | 0010 | Read the data            	                         |
+ *  Overrun error           | 1        | 0010 | Read the data            	                           |
  * ----------------------------------------------------------------------------------------------------
- *  Parity error            | 1        | 0100 | Read the data            	                         |
+ *  Parity error            | 1        | 0100 | Read the data            	                           |
  * ----------------------------------------------------------------------------------------------------
- *  Frame error             | 1        | 1000 | Read the data            	                         |
+ *  Frame error             | 1        | 1000 | Read the data            	                           |
  * ----------------------------------------------------------------------------------------------------
  *  Data received ready     | 3        | 0011 | Standard mode: read RXR.                             |
  *                          |          |      | Data stream mode: The fifo has reached his threshold |
