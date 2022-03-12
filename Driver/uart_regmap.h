@@ -15,7 +15,7 @@
  *  [19:18] | Parity configuration ID                       | R / W       | 
  *  [21:20] | Stop bits number configuration ID             | R / W       | 
  *  [22]    | Data stream mode enable                       | R / W       |
- *  [29:23] | Fifo interrupt threshold                      | R / W       |
+ *  [29:23] | Fifo rx interrupt threshold                   | R / W       |
  *  [31:30] | Reserved                                      | NONE        |
  * -------------------------------------------------------------------------
  */
@@ -83,7 +83,8 @@
  *  Frame error             | 1        | 1000 | Read the data            	                         |
  * ----------------------------------------------------------------------------------------------------
  *  Data received ready     | 3        | 0011 | Standard mode: read RXR.                             |
- *                          |          |      | Data stream mode: read RXR till the buffer is empty. |
+ *                          |          |      | Data stream mode: The fifo has reached his threshold |
+ *                          |          |      | read RXR till the buffer is empty.                   |
  * ----------------------------------------------------------------------------------------------------
  *  Receiver fifo full      | 2        | 0101 | Standard mode: read RXR.                             |
  *                          |          |      | Data stream mode: read RXR till the buffer is empty. | 
