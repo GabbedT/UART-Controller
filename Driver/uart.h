@@ -43,8 +43,7 @@
         INT_FRAME = 0b1000,
         INT_RXD_RDY = 0b0011,
         INT_RX_FULL = 0b0101,
-        INT_CONFIG_DONE = 0b0110,
-        INT_CONFIG_REQ = 0b0111
+        INT_CONFIG_REQ = 0b0110
     } uartInterruptID_t;
 
     /*  Data width configuration code  */
@@ -95,7 +94,13 @@ typedef struct {
 } volatile uart_t;
 
 /* Used to refer to a paricular uart through a pointer */ 
-uart_t *handle; 
+uart_t *gHandle;
+
+/* When the device interrupt in data stream mode because the rx fifo is full the stream retrieved is saved here */
+uint8_t *gDataStrmRxInt;
+
+/* When the device interrupt in normal mode because a byte is received that byte is saved here */
+uint8_t gDataRxInt;
 
 
 //------------------//
@@ -106,7 +111,7 @@ uart_t *handle;
 void uart_initStd();
 
 /* Initialize the device with baudrate and configuration parameters. */
-void uart_init(uint32_t baudRate, uartDataWidth_t dataWidth, uartParityMode_t parityMode,uartStopBits_t stopBits);
+void uart_init(uint32_t baudRate, uartDataWidth_t dataWidth, uartParityMode_t parityMode,uartStopBits_t stopBits, bool dataStreamMode, uint32_t threshold);
 
 
 //-------------//
@@ -203,6 +208,9 @@ inline void uart_setStopBits(uint32_t stopBitsNumber);
 /* Enable or disable data stream mode. */
 inline void uart_setDataStreamMode(bool dataStreamMode);
 
+/* Send the maximum number of data the rx fifo can store before interrupting */
+inline void uart_setThresholdBuf(uint32_t threshold);
+
 
 //---------------//
 //  UART STATUS  //
@@ -236,6 +244,9 @@ inline void uart_enableIntRxDRdy(bool enable);
 
 /* Get interrupt ID */
 inline uint32_t uart_getIntID();
+
+/* This routine may not work because it's dependant on the system. */
+void uart_interruptServiceRoutine() __attribute__((interrupt("IRQ")));
 
 
 //---------------//
