@@ -36,21 +36,19 @@
  *  CTR Register bit fields 
  * -------------------------------------------------------------------------
  *  Bits    | Description                                   | Access mode |
- * ------------------------------------------------------------------------- 
- *  [0]     | Configuration request (MASTER)                | W           | 
- *  [1]     | Configuration requested (SLAVE)               | R           |
- *  [2]     | Set standard configuration                    | W           |
- *  [3]     | Acknowledge configuration request             | W           |
- *  [4]     | Configuration done                            | R           |
- *  [31:5]  | Reserved                                      | NONE        |
+ * -------------------------------------------------------------------------  
+ *  [0]     | Configuration requested (SLAVE)               | R           |
+ *  [1]     | Set standard configuration                    | W           |
+ *  [2]     | Acknowledge configuration request             | W           |
+ *  [3]     | Configuration done                            | R           |
+ *  [31:4]  | Reserved                                      | NONE        |
  * -------------------------------------------------------------------------
  */
 
-#define CFG_REQ_MST  0x00000001
-#define CFG_REQ_SLV  0x00000002
-#define STD_CONFIG   0x00000004
-#define ACKN_CFG     0x00000008
-#define CFG_DONE     0x00000010
+#define CFG_REQ_SLV  0x00000001
+#define STD_CONFIG   0x00000002
+#define ACKN_CFG     0x00000004
+#define CFG_DONE     0x00000008
 
 
 //----------------//
@@ -76,11 +74,11 @@
  * ----------------------------------------------------------------------------------------------------
  *  Configuration error     | 1        | 0001 | Send another configuration request                   |
  * ----------------------------------------------------------------------------------------------------
- *  Overrun error           | 1        | 0010 | Read the data                                        |
+ *  Overrun error           | 1        | 0010 | Read the data            	                         |
  * ----------------------------------------------------------------------------------------------------
- *  Parity error            | 1        | 0100 | Read the data                                        |
+ *  Parity error            | 1        | 0100 | Read the data            	                         |
  * ----------------------------------------------------------------------------------------------------
- *  Frame error             | 1        | 1000 | Read the data                                        |
+ *  Frame error             | 1        | 1000 | Read the data            	                         |
  * ----------------------------------------------------------------------------------------------------
  *  Data received ready     | 3        | 0011 | Standard mode: read RXR.                             |
  *                          |          |      | Data stream mode: The fifo has reached his threshold |

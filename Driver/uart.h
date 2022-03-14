@@ -216,9 +216,6 @@ inline void uart_setThresholdBuf(uint32_t threshold);
 //  UART STATUS  //
 //---------------//
 
-/* Send configuration request to the other device */
-inline void uart_sendConfigReq();
-
 /* Set standard configuration */
 inline void uart_setStdConfig();
 
