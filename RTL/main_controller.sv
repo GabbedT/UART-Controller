@@ -39,6 +39,9 @@
 // KEYWORDS : CONTROLLER LOGIC, next_state_logic, ERROR DETECTION LOGIC
 // ------------------------------------------------------------------------------------
 
+
+// IMPORTANT: REGISTER THE FIFO STATUS SIGNALS TO AVOID GLITCHES
+
 import UART_pkg::*;
 
 module main_controller 
@@ -68,7 +71,7 @@ module main_controller
   input  logic         std_config_i,
   input  uart_config_s config_i,
   input  logic         data_stream_mode_i,
-  input  logic         STR_en_i,
+  input  logic         req_ackn_i,
 
   output logic         STR_en_o,
   output uart_config_s config_o,
@@ -79,12 +82,11 @@ module main_controller
   output logic         rx_fifo_read_o,
   output logic         tx_fifo_write_o,
   /* Data */
-  output logic         data_rx_o,
   output logic [7:0]   data_tx_o,
   /* Error */
   output uart_error_s  error_o
 );
-
+  
 //------------------//
 // CONTROLLER LOGIC //
 //------------------//
@@ -98,7 +100,7 @@ module main_controller
         if (!rst_n_i) begin   
           counter_50ms[CRT] <= 'b0;
         end else if (counter_50ms[CRT] == COUNT_50MS) begin  
-          counter_50ms <= 'b0;
+          counter_50ms[CRT] <= 'b0;
         end else begin
           counter_50ms[CRT] <= counter_50ms[NXT];
         end
@@ -146,7 +148,10 @@ module main_controller
 
 
       always_comb begin : next_state_logic 
-        /* Default values */
+
+        //----------------//
+        // DEFAULT VALUES //
+        //----------------//
 
         /* Default next state logic */
         state[NXT] = state[CRT]; 
@@ -155,19 +160,18 @@ module main_controller
         config_packet_type[NXT] = config_packet_type[CRT];
 
         /* Configuration signals */
-        STR_en_o = STR_en_i;
+        STR_en_o = 1'b0;
         config_o = config_i;
-        config_req_mst_o = config_req_mst_i;
+        config_req_mst_o = 1'b0;
         data_stream_mode_o = data_stream_mode_i;
         error_o.configuration = (interrupt_ackn_i) ? 1'b0 : configuration_error_i;
-        configuration_done_o = 1'b1;
+        configuration_done_o = 1'b0;
 
         /* FIFO signals */
-        rx_fifo_read_o = rx_fifo_read_i;
-        tx_fifo_write_o = tx_fifo_write_i;
+        rx_fifo_read_o = 1'b0;
+        tx_fifo_write_o = 1'b0;
 
         /* Data */
-        data_rx_o = data_rx_i;
         data_tx_o = data_tx_i;
 
         case (state[CRT])
@@ -177,11 +181,6 @@ module main_controller
            */
           RESET: begin 
             /* Don't perform any operation */
-            config_req_mst_o = 1'b0;
-            rx_fifo_read_o = 1'b0;
-            tx_fifo_write_o = 1'b0;
-            configuration_done_o = 1'b0;
-
             state[NXT] = STD_CONFIG;
           end
 
@@ -193,7 +192,7 @@ module main_controller
             config_o.data_width = STD_DATA_WIDTH;
             config_o.parity_mode = STD_PARITY_MODE;
             config_o.stop_bits = STD_STOP_BITS;
-            configuration_done_o = 1'b0;
+            data_stream_mode_o = 1'b0;
 
             state[NXT] = MAIN;
           end
@@ -205,15 +204,17 @@ module main_controller
            */ 
           MAIN: begin 
             config_packet_type[NXT] = 'b0;
+            configuration_done_o = 1'b1;
+
+            rx_fifo_read_o = rx_fifo_read_i;
+            tx_fifo_write_o = tx_fifo_write_i;
 
             /* If the other device requested a configuration setup (current device = SLAVE) */
-            if (config_req_slv_i) begin 
+            if (config_req_slv_i & req_ackn_i) begin 
               state[NXT] = SEND_ACKN_SLV;
-              configuration_done_o = 1'b0;
             end else if (config_req_mst_i) begin 
               /* If the current device request a configuration setup (current device = MASTER) */
               state[NXT] = CFG_REQ_MST;
-              configuration_done_o = 1'b0;
             end else if (std_config_i) begin 
               state[NXT] = STD_CONFIG; 
             end 
@@ -234,10 +235,10 @@ module main_controller
 
           /*
            *  The device waits for the other device to acknowledge the configuration request. 
-           *  It needs to receive an acknowledge packet within 50ms otherwise the device will
+           *  It needs to receive an acknowledgement packet within 50ms otherwise the device will
            *  send another request. The process repeat for three times at the most, then the 
            *  configuration will be considered failed and the device setted with the standard
-           *  configuration.
+           *  configuration. 
            */
           WAIT_REQ_ACKN_MST: begin 
             counter_50ms[NXT] = counter_50ms[CRT] + 1'b1;
@@ -251,7 +252,9 @@ module main_controller
               /* Read the data when the fifo is not empty */
               rx_fifo_read_o = !rx_fifo_empty_i;
 
-              if (data_rx_i == ACKN_PKT) begin 
+              if ((config_packet_type[CRT] == EC_TYPE) & (data_rx_i == ACKN_PKT)) begin 
+                state[NXT] = MAIN;
+              end else if (data_rx_i == ACKN_PKT) begin 
                 state[NXT] = SETUP_MST;
               end
             end else begin 
@@ -265,11 +268,7 @@ module main_controller
            *  The device will send a data width configuration packet to the slave device.
            */
           SETUP_MST: begin 
-            /* Go to the next state only if the transmitter has finished sending the packet */
-            if (tx_done_i) begin
-              state[NXT] = WAIT_ACKN_MST;
-            end
-
+            state[NXT] = WAIT_TX_MST;
             tx_fifo_write_o = 1'b1;
 
             case (config_packet_type[CRT])
@@ -281,10 +280,22 @@ module main_controller
           end
 
 
+          /* 
+           *  Wait transmitter to finsish sending data 
+           */
+          WAIT_TX_MST: begin 
+            /* Go to the next state only if the transmitter has finished sending the packet */
+            if (tx_done_i) begin
+              state[NXT] = WAIT_ACKN_MST;
+            end
+          end
+
+
           /*
            *  The device is waiting for the slave acknowledgment, the fifo must be empty. 
            *  Enable data stream mode so the device doesn't interrupt everytime it receive a packet.
            *  If in 50ms the device doesn't get any acknowledgment packet, raise a configuration error.
+           *  If a non acknowledgment packet is received, it will simply be ignored.
            */
           WAIT_ACKN_MST: begin
             counter_50ms[NXT] = counter_50ms[CRT] + 1'b1;
@@ -347,7 +358,18 @@ module main_controller
           /*
            *  The device will send an acknowledgment packet to continue the configuration process
            */
-          SEND_ACKN_SLV: begin 
+          SEND_ACKN_SLV: begin           
+            /* Send ackowledge packet */
+            tx_fifo_write_o = 1'b1;
+            data_tx_o = ACKN_PKT;
+            state[NXT] = WAIT_TX_SLV;
+          end
+
+          /* 
+           *  Wait transmitter to finsish sending data 
+           */
+          WAIT_TX_SLV: begin 
+            /* Go to the next state only if the transmitter has finished sending the packet */
             if (tx_done_i) begin 
               if (config_packet_type[CRT] == EC_TYPE) begin 
                 state[NXT] = MAIN;
@@ -355,10 +377,6 @@ module main_controller
                 state[NXT] = SETUP_SLV;
               end
             end
-            
-            /* Send ackowledge packet */
-            tx_fifo_write_o = 1'b1;
-            data_tx_o = ACKN_PKT;
           end
 
         endcase
@@ -398,5 +416,77 @@ module main_controller
       end : parity_detection_logic
 
   assign error_o.frame = frame_error_i;
+
+
+//------------//
+// ASSERTIONS //
+//------------//
+
+/* Check that no operation is done during reset */
+sequence no_operation;
+  !(tx_fifo_write_o & rx_fifo_read_o & STR_en_o & configuration_done_o & config_req_mst_o);
+endsequence : no_operation
+
+/* Check the sequence, since the reset is syncronous the FSM needs 1 clock cycle to reach the desired state */
+property rst_values;
+  @(posedge clk_i) !rst_n_i |=> no_operation;
+endproperty : rst_values
+
+/* Check that after failing three times to receive an acknowledgment, the device in the next clock cycle set 
+ * the standard configuration and then goes into main state */
+property fail_req_ackn;
+  @(posedge clk_i) disable iff (!rst_n_i)
+  (state[CRT] == WAIT_REQ_ACKN_MST) && (config_failed[CRT] == 2'd3) |=> (config_o == STD_CONFIGURATION) ##1 (state[CRT] == MAIN);
+endproperty : fail_req_ackn
+
+/* Check that the acknowledgement packet arrives in time */
+property ackn_timing;
+  @(posedge clk_i) disable iff (!rst_n_i)
+  (state[CRT] == WAIT_REQ_ACKN_MST) && (!rx_fifo_empty_i) |-> ((counter_50ms[CRT] < COUNT_50MS) && (data_rx_i == ACKN_PKT));
+endproperty : ackn_timing
+
+/* Configuration request signals must not be asserted when not in main state */
+property cfg_req_chk;
+  @(posedge clk_i) (state[CRT] != MAIN) |-> !config_req_mst_i & !config_req_slv_i;
+endproperty : cfg_req_chk
+
+/* In wait acknowledgement state the receiver fifo has to be empty */ 
+property rx_fifo_chk;
+  @(posedge clk_i) $rose(state[CRT] == WAIT_REQ_ACKN_MST) || $rose(state[CRT] == WAIT_ACKN_MST) |-> rx_fifo_empty_i; 
+endproperty : rx_fifo_chk
+
+/* When the device is sending the acknowledgement, the fifo has to be empty */
+property tx_fifo_chk;
+  @(posedge clk_i) $rose(state[CRT] == SETUP_SLV) |-> tx_fifo_empty_i;
+endproperty
+
+/* The UART can't write and read the fifos at the same time */
+property fifos_op_chk;
+  @(posedge clk_i) disable iff (!rst_n_i) 
+  rx_fifo_read_i != tx_fifo_write_i;
+endproperty
+
+  initial begin : assertions
+    assert property (rst_values)
+    else $fatal("[Main controller] The device must not do any operation during reset!");
+    
+    assert property (fail_req_ackn)
+    else $fatal("[Main controller] Failed recovery from missing request acknowledgment!");
+    
+    assert property (ackn_timing)
+    else $fatal("[Main controller] Illegal acknowledgement packet timing");
+    
+    assert property (cfg_req_chk)
+    else $fatal("[Main controller] During the configuration the device can't send or receive any configuration request!");
+    
+    assert property (rx_fifo_chk)
+    else $fatal("[Main controller] Receiver fifo is not empty!");
+    
+    assert property (tx_fifo_chk)
+    else $fatal("[Main controller] Transmitter fifo is not empty!");
+    
+    assert property (fifos_op_chk)
+    else $fatal("[Main controller] The device can't send and read data in the same clock cycle!");
+  end : assertions
 
 endmodule
