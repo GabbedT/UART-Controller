@@ -272,33 +272,23 @@ void uart_interruptServiceRoutine() {
 
         uart_init(baudRate, dataWidth, parityMode, stopBits, dataStreamMode, threshold);
         return;
-    }
-
-    if (intID == INT_OVERRUN) {
+    } else if (intID == INT_OVERRUN) {
         trashValue = uart_readByte();
         return;
-    }
-
-    if (intID == INT_PARITY) {
+    } else if (intID == INT_PARITY) {
         trashValue = uart_readByte();
         return;
-    }
-
-    if (intID == INT_CONFIG_REQ) {
+    } else if (intID == INT_CONFIG_REQ) {
         gHandle->CTR |= ACKN_CFG; 
         return;
-    }
-
-    if (intID == INT_RX_FULL) {
+    } else if (intID == INT_RX_FULL) {
         if (uart_getDataStreamMode()) {
             *gDataStrmRxInt = uart_readByteStream(RX_FIFO_SIZE);
         } else {
             gDataRxInt = uart_readByte();
         }
         return;
-    }
-
-    if (intID == INT_RXD_RDY) {
+    } else if (intID == INT_RXD_RDY) {
         if (uart_getDataStreamMode()) {
             *gDataStrmRxInt = uart_readByteStream(uart_getThresholdBuf());
         } else {
