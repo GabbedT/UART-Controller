@@ -1,1 +1,1 @@
-# Autoconfigurable-UART
+# Configurable UART
