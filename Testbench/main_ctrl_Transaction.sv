@@ -11,8 +11,8 @@ class main_ctrl_Transaction;
   logic         tx_done_i;
   logic         req_done_i;
 
-  main_ctrl_dataTrx   dataTrx;
-  main_ctrl_configTrx configTrx;
+  main_ctrl_dataTrx   data;
+  main_ctrl_configTrx cfg;
 
 //------//
 // DATA //
@@ -38,8 +38,8 @@ class main_ctrl_Transaction;
     tx_done_i = 1'b0;
     req_done_i = 1'b0;
 
-    dataTrx = new();
-    configTrx = new();
+    data = new();
+    cfg = new();
 
     trx_time = $time;
     if (increment) begin
