@@ -31,7 +31,7 @@ class main_ctrl_dataTrx;
     data_tx_i = 'b0;
     data_rx_i = 'b0;
     data_tx_o = 'b0;
-    parity_i = ^data_rx_i;
+    parity_i = 1'b0;
 
     rx_fifo_empty_i = 1'b0;
     tx_fifo_empty_i = 1'b0;
