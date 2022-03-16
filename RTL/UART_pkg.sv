@@ -109,10 +109,10 @@ package UART_pkg;
   localparam logic [1:0] STOP_BITS_ID = 2'b10;
   
   /* Configuration code */
-  localparam logic [1:0] SB_1BIT  = 2'b00;
-  localparam logic [1:0] SB_15BIT = 2'b01;
-  localparam logic [1:0] RESERVED = 2'b10;
-  localparam logic [1:0] SB_2BIT  = 2'b11;
+  localparam logic [1:0] SB_1BIT   = 2'b00;
+  localparam logic [1:0] SB_2BIT   = 2'b01;
+  localparam logic [1:0] RESERVED1 = 2'b10;
+  localparam logic [1:0] RESERVED2 = 2'b11;
 
 //---------------------------//
 // PARITY MODE CONFIGURATION //
@@ -122,10 +122,10 @@ package UART_pkg;
   localparam logic [1:0] PARITY_MODE_ID = 2'b11;
 
   /* Configuration code */
-  localparam logic [1:0] DISABLED_1  = 2'b00;
-  localparam logic [1:0] EVEN        = 2'b01;
-  localparam logic [1:0] DISABLED_2  = 2'b10;
-  localparam logic [1:0] ODD         = 2'b11;
+  localparam logic [1:0] EVEN       = 2'b00;
+  localparam logic [1:0] ODD        = 2'b01;
+  localparam logic [1:0] DISABLED1  = 2'b10;
+  localparam logic [1:0] DISABLED2  = 2'b11;
 
 //---------------------------//
 // END CONFIGURATION PROCESS //
