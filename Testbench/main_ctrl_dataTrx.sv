@@ -52,13 +52,13 @@ class main_ctrl_dataTrx;
     bit p_even = ^this.data_rx_i ^ 1'b0;
     bit p_odd = ^this.data_rx_i ^ 1'b1;
 
-    if (parity_type == UART_pkg::EVEN) {
+    if (parity_type == UART_pkg::EVEN) begin
       return this.inject_error ? !p_even : p_even;
-    } else if (parity_type == UART_pkg::ODD) {
+    end else if (parity_type == UART_pkg::ODD) begin
       return this.inject_error ? !p_odd : p_odd;
-    } else {
+    end else begin
       return 1'b0;
-    }
+    end
   endfunction : calc_parity
 
   /* Print fifo status */
