@@ -57,17 +57,17 @@
     /*  Stop bits number configuration code  */
     typedef enum {
         STOP_BITS_1 = 0,
-        STOP_BITS_RESERVED1 = 1,
-        STOP_BITS_RESERVED2 = 2,
-        STOP_BITS_2 = 3
+        STOP_BITS_2 = 1,
+        STOP_BITS_RESERVED1 = 2,
+        STOP_BITS_RESERVED2 = 3
     } uartStopBits_t;
 
     /*  Parity mode configuration code  */
     typedef enum {
-        PARITY_DISABLED_1 = 0,
-        PARITY_EVEN = 1,
-        PARITY_DISABLED_2 = 2,
-        PARITY_ODD = 3
+        PARITY_EVEN = 0,
+        PARITY_ODD = 1,
+        PARITY_DISABLED_1 = 2,
+        PARITY_DISABLED_2 = 3
     } uartParityMode_t;
     
 
