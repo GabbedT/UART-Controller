@@ -11,8 +11,8 @@ package UART_pkg;
   localparam SYSTEM_CLOCK_FREQ = 100_000_000;
 
   /* Number of words stored in the buffers */
-  localparam TX_FIFO_DEPTH = 128;
-  localparam RX_FIFO_DEPTH = 128;
+  localparam TX_FIFO_DEPTH = 64;
+  localparam RX_FIFO_DEPTH = 64;
 
   /* Interrupt id */
   localparam INT_NONE        = 4'b0000;
@@ -22,13 +22,12 @@ package UART_pkg;
   localparam INT_FRAME       = 4'b1000;
   localparam INT_RXD_RDY     = 4'b0011;
   localparam INT_RX_FULL     = 4'b0101;
-  localparam INT_CONFIG_DONE = 4'b0110;
-  localparam INT_CONFIG_REQ  = 4'b0111;
+  localparam INT_CONFIG_REQ  = 4'b0110;
 
 
-//------------------------------//
-//  MAIN CONTROLLER PARAMETERS  //
-//------------------------------//
+//-----------------------------//
+//  MAIN CONTROLLER PARAMETERS //
+//-----------------------------//
 
   localparam IDLE = 1;
 
@@ -53,7 +52,7 @@ package UART_pkg;
   localparam COUNT_10MS = SYSTEM_CLOCK_FREQ * T_10MS;
   localparam COUNT_50MS = SYSTEM_CLOCK_FREQ * T_50MS;
 
-  localparam ACKN_PKT = 8'hFF;
+  localparam ACKN_PKT = 8'hFF; 
 
 
 //-------------//
@@ -103,7 +102,7 @@ package UART_pkg;
 
 //-------------------------//
 // STOP BITS CONFIGURATION //
-//-------------------------//
+//-------------------------// 
 
   /* Command ID */
   localparam logic [1:0] STOP_BITS_ID = 2'b10;
@@ -138,9 +137,11 @@ package UART_pkg;
 //-------------------------//
 
   /* Standard configuration */
-  localparam STD_DATA_WIDTH = DW_8BIT;
-  localparam STD_STOP_BITS = SB_2BIT;
+  localparam STD_DATA_WIDTH  = DW_8BIT;
+  localparam STD_STOP_BITS   = SB_1BIT;
   localparam STD_PARITY_MODE = EVEN;
+
+  localparam STD_CONFIGURATION = {STD_DATA_WIDTH, STD_STOP_BITS, STD_PARITY_MODE};
   
   typedef struct packed {
     /* If the UART doesn't see a stop bit */
@@ -172,11 +173,13 @@ package UART_pkg;
       /* If the device sees the initialization signal (10ms RX low) then send an acknowledgment packet */
       SEND_ACKN_SLV,
       /* State before entering the main state */
-      END_PROCESS,
       /* Drive TX low to send the initialization signal */
       SETUP_SLV,
       /* Send data width packet */ 
       SETUP_MST,
+      /* Wait transmitter to end its task */
+      WAIT_TX_MST,
+      WAIT_TX_SLV,
       /* Wait request acknowledgment */
       WAIT_REQ_ACKN_MST,
       /* Wait for the acknowledgment data width packet */

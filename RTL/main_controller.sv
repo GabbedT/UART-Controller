@@ -78,6 +78,7 @@ module main_controller
   output logic         config_req_mst_o,
   output logic         data_stream_mode_o,
   output logic         configuration_done_o,
+  output logic         req_ackn_o,
   /* FIFO operations */
   output logic         rx_fifo_read_o,
   output logic         tx_fifo_write_o,
@@ -166,6 +167,7 @@ module main_controller
         data_stream_mode_o = data_stream_mode_i;
         error_o.configuration = (interrupt_ackn_i) ? 1'b0 : configuration_error_i;
         configuration_done_o = 1'b0;
+        req_ackn_o = req_ackn_i;
 
         /* FIFO signals */
         rx_fifo_read_o = 1'b0;
@@ -181,7 +183,7 @@ module main_controller
            */
           RESET: begin 
             /* Don't perform any operation */
-            state[NXT] = STD_CONFIG;
+            state[NXT] = MAIN;
           end
 
           /*
@@ -330,8 +332,6 @@ module main_controller
            *  receive a packet.
            */
           SETUP_SLV: begin 
-            state[NXT] = SEND_ACKN_SLV;
-            STR_en_o = 1'b1;
             data_stream_mode_o = 1'b1;
 
             rx_fifo_read_o = !tx_fifo_empty_i;
@@ -339,6 +339,8 @@ module main_controller
             /* Wait until a configuration packet arrives, then process the next configuration packet */
             if (!tx_fifo_empty_i) begin 
               config_packet_type[NXT] = config_packet_type[CRT] + 1'b1;
+              state[NXT] = SEND_ACKN_SLV;
+              STR_en_o = 1'b1;
             end
 
             /* If there is an error in the packet received, raise a configuration error
@@ -360,6 +362,7 @@ module main_controller
            */
           SEND_ACKN_SLV: begin           
             /* Send ackowledge packet */
+            req_ackn_o = 1'b0;
             tx_fifo_write_o = 1'b1;
             data_tx_o = ACKN_PKT;
             state[NXT] = WAIT_TX_SLV;
@@ -466,6 +469,11 @@ property fifos_op_chk;
   rx_fifo_read_i != tx_fifo_write_i;
 endproperty
 
+/* Errors flow from input to output in main state */
+property error_chk;
+  @(posedge clk_i) (state[CRT] == MAIN) |-> (error_o.configuration == configuration_error_i) && (error_o.frame == frame_error_i) && (error_o.overrun == overrun_error_i); 
+endproperty
+
   initial begin : assertions
     assert property (rst_values)
     else $fatal("[Main controller] The device must not do any operation during reset!");
@@ -487,6 +495,9 @@ endproperty
     
     assert property (fifos_op_chk)
     else $fatal("[Main controller] The device can't send and read data in the same clock cycle!");
+
+    assert property (error_chk)
+    else $fatal("[Main controller] Fail on error flow!");
   end : assertions
 
 endmodule
