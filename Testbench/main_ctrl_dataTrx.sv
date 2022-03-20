@@ -5,6 +5,8 @@ class main_ctrl_dataTrx;
 
   rand  logic [7:0] data_tx_i;
   rand  logic [7:0] data_rx_i;
+  rand  logic       rx_fifo_read_i;
+  rand  logic       tx_fifo_write_i;
   logic [7:0]       data_tx_o;
   logic             parity_i;
 
@@ -21,7 +23,7 @@ class main_ctrl_dataTrx;
 // CONSTRAINT //
 //------------//
 
-  constraint inject_error_c { inject_error dist {1'b0 := 80, 1'b1 := 20}; }
+  constraint inject_error_c { inject_error dist {1'b0 := 80, 1'b1 := 20}; !rx_fifo_read_i -> inject_error == 0;}
 
 //-------------//
 // CONSTRUCTOR //
@@ -48,9 +50,9 @@ class main_ctrl_dataTrx;
 //-----------//
 
   /* Calculate parity on received data */
-  function automatic bit calc_parity (input logic [1:0] parity_type);
-    bit p_even = ^this.data_rx_i ^ 1'b0;
-    bit p_odd = ^this.data_rx_i ^ 1'b1;
+  function automatic bit calc_parity (input logic [1:0] parity_type, input logic [7:0] data);
+    bit p_even = ^data ^ 1'b0;
+    bit p_odd = ^data ^ 1'b1;
 
     if (parity_type == UART_pkg::EVEN) begin
       return this.inject_error ? !p_even : p_even;
