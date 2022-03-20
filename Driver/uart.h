@@ -11,23 +11,8 @@
  */
 #define SYS_CLOCK_FREQ 100'000'000  /*  100MHz clock  */
 
-#define RX_FIFO_SIZE 128     /* In byte */
-#define TX_FIFO_SIZE 128     /* In byte */
-
-
-//----------------//
-//  REGISTER MAP  //
-//----------------//
-
-/* Register addresses */
-
-#define STR_ADDR   0       /*  Status Register            */
-#define CTR_ADDR   1       /*  Control Register           */
-#define ISR_ADDR   2       /*  Interrupt Status Register  */
-#define IMR_ADDR   3       /*  Interrupt Mask Register    */
-#define RXR_ADDR   4       /*  RX Register                */
-#define TXR_ADDR   5       /*  TX Register                */
-#define IFR_ADDR   6       /*  Info Register              */
+#define RX_FIFO_SIZE 64     /* In byte */
+#define TX_FIFO_SIZE 64     /* In byte */
 
 
 //---------------//
@@ -36,14 +21,14 @@
 
     /* Interrupt code */
     typedef enum {
-        INT_NONE = 0b0000,
-        INT_CONFIG_FAIL = 0b0001,
-        INT_OVERRUN = 0b0010,
-        INT_PARITY = 0b0100,
-        INT_FRAME = 0b1000,
-        INT_RXD_RDY = 0b0011,
-        INT_RX_FULL = 0b0101,
-        INT_CONFIG_REQ = 0b0110
+        INT_NONE = 0b000,
+        INT_CONFIG_FAIL = 0b001,
+        INT_OVERRUN = 0b010,
+        INT_PARITY = 0b011,
+        INT_FRAME = 0b100,
+        INT_RXD_RDY = 0b101,
+        INT_RX_FULL = 0b110,
+        INT_CONFIG_REQ = 0b111
     } uartInterruptID_t;
 
     /*  Data width configuration code  */
@@ -71,36 +56,47 @@
     } uartParityMode_t;
     
 
+
 //----------//
 //  DEVICE  //
 //----------//
 
-/* Struct that rapresent the register map of the device */
+/* Struct that incapsulate the register map and data of the device */
 typedef struct {
+    /*  REGISTER MAP  */
+
     /*  Status Register            */
-    uint32_t STR;
+    uint8_t STR;
+    /*  Lower Divisor Register     */
+    uint8_t LDVR;
+    /*  Lower Divisor Register     */
+    uint8_t UDVR;
+    /* Fifo Status Register        */
+    uint8_t FSR;
     /*  Control Register           */
-    uint32_t CTR;
+    uint8_t CTR;
     /*  Interrupt Status Register  */
-    uint32_t ISR;
-    /*  Interrupt Mask Register    */
-    uint32_t IMR;
+    uint8_t ISR;
     /*  RX Register                */
-    uint32_t RXR;
+    uint8_t RXR;
     /*  TX Register                */
-    uint32_t TXR;
-    /*  Info Register              */
-    uint32_t IFR;
+    uint8_t TXR;
+
+    /*  DEVICE DATA  */
+
+    /* When the device interrupt in data stream mode because the rx fifo is full the stream retrieved is saved here */
+    uint8_t *gDataStrmRxInt;
+
+    /* When the device interrupt in normal mode because a byte is received that byte is saved here */
+    uint8_t gDataRxInt;
+
+    /* Set this bit if the device fails configuring */
+    bool configFailed;
 } volatile uart_t;
 
 /* Used to refer to a paricular uart through a pointer */ 
 uart_t *gHandle;
 
-/* When the device interrupt in data stream mode because the rx fifo is full the stream retrieved is saved here */
-uint8_t *gDataStrmRxInt;
-
-/* When the device interrupt in normal mode because a byte is received that byte is saved here */
-uint8_t gDataRxInt;
 
 
 //------------------//
@@ -114,6 +110,7 @@ void uart_initStd();
 void uart_init(uint32_t baudRate, uartDataWidth_t dataWidth, uartParityMode_t parityMode,uartStopBits_t stopBits, bool dataStreamMode, uint32_t threshold);
 
 
+
 //-------------//
 //  BAUD RATE  //
 //-------------//
@@ -123,12 +120,10 @@ void uart_setBaudRate(uint32_t baudRate);
 uint32_t uart_getBaudRate();
 
 
+
 //----------------//
 //  RX OPERATION  //
-//----------------//
-
-/* Receiver buffer full status.*/
-inline bool uart_rxFull();   
+//----------------//   
 
 /* Receiver buffer empty status.*/
 inline bool uart_rxEmpty();        
@@ -148,7 +143,8 @@ const uint8_t* uart_readByteStream(size_t size);
  *  use is legal to use only if the UART is in data stream mode. Otherwise every read the UART 
  *  will generate an interrupt request.
  */
-const char* UART_readString();  
+const char* uart_readString();  
+
 
 
 //----------------//
@@ -156,10 +152,7 @@ const char* UART_readString();
 //----------------//
 
 /* Transmitter buffer full status.*/
-inline bool uart_txFull();   
-
-/* Transmitter buffer empty status.*/
-inline bool uart_txEmpty(); 
+inline bool uart_txFull();    
 
 /* Transmit a byte */
 void uart_sendByte(uint8_t data); 
@@ -178,6 +171,7 @@ void uart_sendByteStream(const uint8_t *stream, size_t size);
  *  to wait until the next character.
  */
 void uart_sendString(const char *string); 
+
 
 
 //----------------------//
@@ -212,6 +206,7 @@ inline void uart_setDataStreamMode(bool dataStreamMode);
 inline void uart_setThresholdBuf(uint32_t threshold);
 
 
+
 //---------------//
 //  UART STATUS  //
 //---------------//
@@ -221,6 +216,7 @@ inline void uart_setStdConfig();
 
 /* Acknowledge configuration request from another device, used in the interrupt service routine */
 inline void uart_acknConfigReq();
+
 
 
 //-------------//
@@ -245,15 +241,5 @@ inline uint32_t uart_getIntID();
 /* This routine may not work because it's dependant on the system. */
 void uart_interruptServiceRoutine() __attribute__((interrupt("IRQ")));
 
-
-//---------------//
-//  DEVICE INFO  //
-//---------------//
-
-/* Product number of the device */
-inline uint32_t UART_getProductNumber();
-
-/* Device number in the system */
-inline uint32_t UART_getDeviceNumber();
 
 #endif

@@ -2,30 +2,82 @@
 #define UART_REGMAP_INCLUDED
 
 //----------------//
+//  REGISTER MAP  //
+//----------------//
+
+/* Register addresses */
+
+#define STR_ADDR   0       /*  Status Register            */
+#define LDVR_ADDR  1       /*  Lower Divisor Register     */
+#define UDVR_ADDR  1       /*  Upper Divisor Register     */
+#define FSR_ADDR   2       /*  Fifo Status Register       */       
+#define CTR_ADDR   4       /*  Control Register           */
+#define ISR_ADDR   5       /*  Interrupt Status Register  */
+#define RXR_ADDR   6       /*  Data Received Register     */
+#define TXR_ADDR   7       /*  Data Transmitted Register  */
+
+
+//----------------//
 //  STR REGISTER  //
 //----------------//
 
 /* 
  *  STR Register bit fields 
+ * -----------------------------------------------------------------------
+ *  Bits  | Description                                   | Access mode |
+ * -----------------------------------------------------------------------
+ *  [1:0] | Data width configuration ID                   | R / W       |
+ *  [3:2] | Parity configuration ID                       | R / W       | 
+ *  [5:4] | Stop bits number configuration ID             | R / W       | 
+ *  [6]   | Data stream mode enable                       | R / W       |
+ *  [7]   | Interrupt acknowledge                         | W           | 
+ * -----------------------------------------------------------------------
+ */
+
+#define DATA_WIDTH          0x03
+#define PARITY_MODE         0x0C
+#define STOP_BITS           0x30
+#define DATA_STREAM_MODE    0x40
+#define INT_ACKN            0x80
+
+
+//----------------//
+//  DVR REGISTER  //
+//----------------//
+
+/* 
+ *  DVR Register bit fields 
  * -------------------------------------------------------------------------
  *  Bits    | Description                                   | Access mode |
  * -------------------------------------------------------------------------
- *  [15:0]  | Divisor value to obtain the desired baud rate | R / W       |
- *  [17:16] | Data width configuration ID                   | R / W       |
- *  [19:18] | Parity configuration ID                       | R / W       | 
- *  [21:20] | Stop bits number configuration ID             | R / W       | 
- *  [22]    | Data stream mode enable                       | R / W       |
- *  [29:23] | Fifo rx interrupt threshold                   | R / W       |
- *  [31:30] | Reserved                                      | NONE        |
+ *  [15:0]  | Divisor value to obtain the desired baud rate.| R / W       |
+ *          | Since registers are 8 bit the lower and the   |             |
+ *          | upper portions are addressed differently      |             |
  * -------------------------------------------------------------------------
  */
 
-#define DIVISOR             0x0000FFFF
-#define DATA_WIDTH          0x00030000
-#define PARITY_MODE         0x000C0000
-#define STOP_BITS           0x00300000
-#define DATA_STREAM_MODE    0x00400000
-#define FIFO_THRESHOLD      0x3F800000
+#define LOWER_DIVISOR 0x00FF
+#define UPPER_DIVISOR 0xFF00
+
+
+//----------------//
+//  FSR REGISTER  //
+//----------------//
+
+/* 
+ *  FSR Register bit fields 
+ * -------------------------------------------------------------------------
+ *  Bits    | Description                                   | Access mode |
+ * -------------------------------------------------------------------------
+ *  [5:0]   | Fifo rx interrupt threshold                   | R / W       |
+ *  [6]     | FIFO RX empty                                 | R           |
+ *  [7]     | FIFO TX full                                  | R           |
+ * -------------------------------------------------------------------------
+ */
+
+#define FIFO_THRESHOLD 0x3F
+#define RX_EMPTY       0x40
+#define TX_FULL        0x80
 
 
 //----------------//
@@ -41,14 +93,13 @@
  *  [1]     | Set standard configuration                    | W           |
  *  [2]     | Acknowledge configuration request             | W           |
  *  [3]     | Configuration done                            | R           |
- *  [31:4]  | Reserved                                      | NONE        |
  * -------------------------------------------------------------------------
  */
 
-#define CFG_REQ_SLV  0x00000001
-#define STD_CONFIG   0x00000002
-#define ACKN_CFG     0x00000004
-#define CFG_DONE     0x00000008
+#define CFG_REQ_SLV  0x01
+#define STD_CONFIG   0x02
+#define ACKN_CFG     0x04
+#define CFG_DONE     0x08
 
 
 //----------------//
@@ -58,65 +109,47 @@
 /*
  *  ISR Register bit fields 
  * ----------------------------------------------------------------------------------------------------
- *  Bits   | Description               | Access mode |                                               |
+ *  Bits   | Description                          | Access mode |                                    |
  * ----------------------------------------------------------------------------------------------------
- *  [0]    | Interrupt pending         | R           |                                               |
- *  [2:1]  | Interrupt code            | R           |                                               |
- *  [3]    | Interrupt acknowledge     | W           |                                               |
- *  [31:4] | Reserved                  | NONE        |                                               |
+ *  [0]    | Interrupt pending                    | R           |                                    |
+ *  [3:1]  | Interrupt code                       | R           |                                    |
+ *  [4]    | Overrun error interrupt enable       | W           |                                    |
+ *  [5]    | Parity error interrupt enable        | W           |                                    |
+ *  [6]    | Frame error interrupt enable         | W           |                                    |
+ *  [7]    | Data rx ready interrupt enable       | W           |                                    |
  * ----------------------------------------------------------------------------------------------------
  *  The interrupt has to be acknowledged in every case by writing a 1 to the interrupt acknowledge   |
  *  bit field.                                                                                       |
  * ----------------------------------------------------------------------------------------------------
  *  Cause                   | Priority | ID   | Clears                                               | 
  * ----------------------------------------------------------------------------------------------------
- *  None                    | None     | 0000 | None                                                 |
+ *  None                    | None     | 000  | None                                                 |
  * ----------------------------------------------------------------------------------------------------
- *  Configuration error     | 1        | 0001 | Send another configuration request                   |
+ *  Configuration error     | 1        | 001  | Send another configuration request                   |
  * ----------------------------------------------------------------------------------------------------
- *  Overrun error           | 1        | 0010 | Read the data            	                         |
+ *  Overrun error           | 1        | 010  | Read the data            	                           |
  * ----------------------------------------------------------------------------------------------------
- *  Parity error            | 1        | 0100 | Read the data            	                         |
+ *  Parity error            | 1        | 011  | Read the data            	                           |
  * ----------------------------------------------------------------------------------------------------
- *  Frame error             | 1        | 1000 | Read the data            	                         |
+ *  Frame error             | 1        | 100  | Read the data            	                           |
  * ----------------------------------------------------------------------------------------------------
- *  Data received ready     | 3        | 0011 | Standard mode: read RXR.                             |
+ *  Data received ready     | 3        | 101  | Standard mode: read RXR.                             |
  *                          |          |      | Data stream mode: The fifo has reached his threshold |
  *                          |          |      | read RXR till the buffer is empty.                   |
  * ----------------------------------------------------------------------------------------------------
- *  Receiver fifo full      | 2        | 0101 | Standard mode: read RXR.                             |
+ *  Receiver fifo full      | 2        | 110  | Standard mode: read RXR.                               |
  *                          |          |      | Data stream mode: read RXR till the buffer is empty. | 
  * ----------------------------------------------------------------------------------------------------  
- *  Requested configuration | 2        | 0110 | Acknowledge the request or let the request expire.   |
+ *  Requested configuration | 2        | 111 | Acknowledge the request or let the request expire.    |
  * ----------------------------------------------------------------------------------------------------                        
  */
 
-#define INT_PEND 0x00000001
-#define INT_ID   0x00000006
-#define INT_ACKN 0x00000008
-
-
-//----------------//
-//  IMR REGISTER  //
-//----------------//
-
-/* 
- *  IMR Register bit fields 
- * ---------------------------------------------------------------
- *  Bits   | Description                          | Access mode |
- * ---------------------------------------------------------------
- *  [0]    | Overrun error interrupt enable       | W           |
- *  [1]    | Parity error interrupt enable        | W           |
- *  [2]    | Frame error interrupt enable         | W           |
- *  [3]    | Data rx ready interrupt enable       | W           |  
- *  [31:4] | Reserved                             | NONE        |
- * --------------------------------------------------------------- 
- */ 
-
-#define INT_OVR_EN 0x00000001
-#define INT_PAR_EN 0x00000002
-#define INT_FRM_EN 0x00000004
-#define INT_RXD_EN 0x00000008
+#define INT_PEND   0x01
+#define INT_ID     0x0E
+#define INT_OVR_EN 0x10
+#define INT_PAR_EN 0x20
+#define INT_FRM_EN 0x40
+#define INT_RXD_EN 0x80
 
 
 //----------------//
@@ -129,15 +162,10 @@
  *  Bits    | Description                          | Access mode |
  * ----------------------------------------------------------------
  *  [7:0]   | Received data                        | R           |
- *  [8]     | FIFO RX full                         | R           |
- *  [9]     | FIFO RX empty                        | R           |
- *  [31:10] | Reserved                             | NONE        |
  * ----------------------------------------------------------------
  */
 
-#define DATA_RX  0x000000FF
-#define RX_FULL  0x00000100
-#define RX_EMPTY 0x00000200
+#define DATA_RX  0xFF
 
 
 //----------------//
@@ -150,34 +178,9 @@
  *  Bits    | Description                          | Access mode |
  * ----------------------------------------------------------------
  *  [7:0]   | Data to be send                      | W           |
- *  [8]     | FIFO TX full                         | R           |
- *  [9]     | FIFO TX empty                        | R           |
- *  [31:10] | Reserved                             | NONE        |
  * ----------------------------------------------------------------
  */ 
 
-#define DATA_TX  0x000000FF
-#define TX_FULL  0x00000100
-#define TX_EMPTY 0x00000200  
-
-
-//----------------//
-//  IFR REGISTER  //
-//----------------//
-
-/* 
- *  IFR Register bit fields 
- * -----------------------------------------------------------------
- *  Bits    | Description                           | Access mode |
- * -----------------------------------------------------------------
- *  [15:0]  | Creator's device initials (GT) in hex | R           |
- *  [23:16] | Product number                        | R           |
- *  [31:24] | Device's number in the system         | R           | 
- * -----------------------------------------------------------------  
- */
-
-#define DEVICE_INITIALS 0x0000FFFF
-#define PRODUCT_NUMBER  0x00FF0000
-#define DEVICE_NUMBER   0xFF000000
+#define DATA_TX  0xFF
 
 #endif
