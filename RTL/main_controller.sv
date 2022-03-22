@@ -94,6 +94,30 @@ module main_controller
 // CONTROLLER LOGIC //
 //------------------//
 
+    typedef enum logic [3:0] {
+      /* After reset signal, every register is resetted in standard configuration */
+      RESET,
+      /* Send configuration request */ 
+      CFG_REQ_MST,
+      /* If the device sees the initialization signal (10ms RX low) then send an acknowledgment packet */
+      SEND_ACKN_SLV,
+      /* Drive TX low to send the initialization signal */
+      SETUP_SLV,
+      /* Send data width packet */ 
+      SETUP_MST,
+      /* Wait transmitter to end its task */
+      WAIT_TX_MST,
+      WAIT_TX_SLV,
+      /* Wait request acknowledgment */
+      WAIT_REQ_ACKN_MST,
+      /* Wait for the acknowledgment data width packet */
+      WAIT_ACKN_MST,
+      /* Setup the device in standard configuration */
+      STD_CONFIG,
+      /* UART's main state */
+      MAIN
+  } main_control_fsm_e;
+
   main_control_fsm_e [CRT:NXT] state;
 
   logic [CRT:NXT][$clog2(COUNT_50MS) - 1:0] counter_50ms;
