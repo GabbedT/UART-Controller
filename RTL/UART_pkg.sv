@@ -28,29 +28,11 @@ package UART_pkg;
 //-----------------------------//
 //  MAIN CONTROLLER PARAMETERS //
 //-----------------------------//
-
-  localparam IDLE = 1;
-
-  /* If the signal is driven directly by the controller or by the input */
-  localparam DRV_CONTROLLER = 1;
-  localparam DRV_INPUT = 0;
-
-  /* The UART's type */ 
-  localparam MASTER = 1;
-  localparam SLAVE = 0;
-  
-  /* FSM next and current state */
-  localparam NXT = 1;
-  localparam CRT = 0;
-
-  /* Milliseconds in seconds */ 
-  localparam T_50MS = 50 * (10**(-3));
-  localparam T_10MS = 10 * (10**(-3));
   
   /* How many clock cycles does it need to reach 10 / 50 ms */ 
   /* based on a specific system clock */
-  localparam COUNT_10MS = SYSTEM_CLOCK_FREQ * T_10MS;
-  localparam COUNT_50MS = SYSTEM_CLOCK_FREQ * T_50MS;
+  localparam COUNT_10MS = SYSTEM_CLOCK_FREQ / 100;
+  localparam COUNT_50MS = SYSTEM_CLOCK_FREQ / 20;
 
   localparam ACKN_PKT = 8'hFF; 
 
@@ -70,9 +52,9 @@ package UART_pkg;
    */
 
   typedef struct packed {
-    logic [1:0] id;
-    logic [1:0] option;
     logic [3:0] dont_care;
+    logic [1:0] option;
+    logic [1:0] id;
   } configuration_packet_s;
 
   /* The packet can have 2 different rapresentation thus it's expressed as union */
@@ -87,6 +69,7 @@ package UART_pkg;
     return {4'b0, option, id};
   endfunction : assemble_packet
   
+
 //----------------------------//
 // PACKET WIDTH CONFIGURATION //
 //----------------------------//
@@ -100,25 +83,13 @@ package UART_pkg;
   localparam logic [1:0] DW_7BIT = 2'b10;
   localparam logic [1:0] DW_8BIT = 2'b11;
 
-//-------------------------//
-// STOP BITS CONFIGURATION //
-//-------------------------// 
-
-  /* Command ID */
-  localparam logic [1:0] STOP_BITS_ID = 2'b10;
-  
-  /* Configuration code */
-  localparam logic [1:0] SB_1BIT   = 2'b00;
-  localparam logic [1:0] SB_2BIT   = 2'b01;
-  localparam logic [1:0] RESERVED1 = 2'b10;
-  localparam logic [1:0] RESERVED2 = 2'b11;
 
 //---------------------------//
 // PARITY MODE CONFIGURATION //
 //---------------------------//
 
   /* Command ID */
-  localparam logic [1:0] PARITY_MODE_ID = 2'b11;
+  localparam logic [1:0] PARITY_MODE_ID = 2'b10;
 
   /* Configuration code */
   localparam logic [1:0] EVEN       = 2'b00;
@@ -126,9 +97,25 @@ package UART_pkg;
   localparam logic [1:0] DISABLED1  = 2'b10;
   localparam logic [1:0] DISABLED2  = 2'b11;
 
+
+//-------------------------//
+// STOP BITS CONFIGURATION //
+//-------------------------// 
+
+  /* Command ID */
+  localparam logic [1:0] STOP_BITS_ID = 2'b11;
+  
+  /* Configuration code */
+  localparam logic [1:0] SB_1BIT   = 2'b00;
+  localparam logic [1:0] SB_2BIT   = 2'b01;
+  localparam logic [1:0] RESERVED1 = 2'b10;
+  localparam logic [1:0] RESERVED2 = 2'b11;
+
+
 //---------------------------//
 // END CONFIGURATION PROCESS //
 //---------------------------//
+
 
   localparam logic [1:0] END_CONFIGURATION_ID = 2'b00;
 
@@ -136,12 +123,13 @@ package UART_pkg;
 // ERROR AND CONFIGURATION //
 //-------------------------//
 
+
   /* Standard configuration */
   localparam STD_DATA_WIDTH  = DW_8BIT;
   localparam STD_STOP_BITS   = SB_1BIT;
   localparam STD_PARITY_MODE = EVEN;
 
-  localparam STD_CONFIGURATION = {STD_DATA_WIDTH, STD_STOP_BITS, STD_PARITY_MODE};
+  localparam STD_CONFIGURATION = {STD_DATA_WIDTH, STD_PARITY_MODE, STD_STOP_BIT};
   
   typedef struct packed {
     /* If the UART doesn't see a stop bit */
@@ -157,9 +145,10 @@ package UART_pkg;
 
   typedef struct packed {
     logic [1:0] data_width;
-    logic [1:0] stop_bits;
     logic [1:0] parity_mode;
+    logic [1:0] stop_bits;
   } uart_config_s;
+
 
 //------------------------------//
 // MAIN CONTROL FSM ENUMERATION //

@@ -40,8 +40,6 @@
 // ------------------------------------------------------------------------------------
 
 
-// IMPORTANT: REGISTER THE FIFO STATUS SIGNALS TO AVOID GLITCHES
-
 import UART_pkg::*;
 
 module main_controller 
@@ -87,7 +85,11 @@ module main_controller
   /* Error */
   output uart_error_s  error_o
 );
-  
+
+  /* FSM next and current state */
+  localparam NXT = 1;
+  localparam CRT = 0;
+
 //------------------//
 // CONTROLLER LOGIC //
 //------------------//
@@ -244,6 +246,7 @@ module main_controller
            */
           WAIT_REQ_ACKN_MST: begin 
             counter_50ms[NXT] = counter_50ms[CRT] + 1'b1;
+            config_req_mst_o = 1'b0;
 
             if (config_failed[CRT] == 2'd3) begin 
               /* Raise a configuration error and set the standard configuration */
@@ -259,7 +262,7 @@ module main_controller
               end else if (data_rx_i == ACKN_PKT) begin 
                 state[NXT] = SETUP_MST;
               end
-            end else begin 
+            end else if (counter_50ms[CRT] == COUNT_50MS) begin 
               /* Try another request */
               config_failed[NXT] = config_failed[CRT] + 1'b1;
               state[NXT] = CFG_REQ_MST;
@@ -334,18 +337,18 @@ module main_controller
           SETUP_SLV: begin 
             data_stream_mode_o = 1'b1;
 
-            rx_fifo_read_o = !tx_fifo_empty_i;
+            rx_fifo_read_o = !rx_fifo_empty_i;
 
-            /* Wait until a configuration packet arrives, then process the next configuration packet */
-            if (!tx_fifo_empty_i) begin 
-              config_packet_type[NXT] = config_packet_type[CRT] + 1'b1;
-              state[NXT] = SEND_ACKN_SLV;
-              STR_en_o = 1'b1;
-            end
-
-            /* If there is an error in the packet received, raise a configuration error
+            /* Wait until a configuration packet arrives, then process the next configuration 
+             * packet. If there is an error in the packet received, raise a configuration error
              * and use the standard configuration */
             if (counter_50ms[CRT] != COUNT_50MS) begin
+              if (!rx_fifo_empty_i) begin
+                config_packet_type[NXT] = config_packet_type[CRT] + 1'b1;
+                state[NXT] = SEND_ACKN_SLV;
+                STR_en_o = 1'b1;
+              end
+
               case (data_rx_i.cfg_packet.id)
                 DATA_WIDTH_ID:  config_o.data_width = data_rx_i.cfg_packet.option;
                 PARITY_MODE_ID: config_o.parity_mode = data_rx_i.cfg_packet.option;
@@ -476,28 +479,28 @@ endproperty
 
   initial begin : assertions
     assert property (rst_values)
-    else $fatal("[Main controller] The device must not do any operation during reset!");
+    else $info("[Main controller] The device must not do any operation during reset!");
     
     assert property (fail_req_ackn)
-    else $fatal("[Main controller] Failed recovery from missing request acknowledgment!");
+    else $info("[Main controller] Failed recovery from missing request acknowledgment!");
     
     assert property (ackn_timing)
-    else $fatal("[Main controller] Illegal acknowledgement packet timing");
+    else $info("[Main controller] Illegal acknowledgement packet timing");
     
     assert property (cfg_req_chk)
-    else $fatal("[Main controller] During the configuration the device can't send or receive any configuration request!");
+    else $info("[Main controller] During the configuration the device can't send or receive any configuration request!");
     
     assert property (rx_fifo_chk)
-    else $fatal("[Main controller] Receiver fifo is not empty!");
+    else $info("[Main controller] Receiver fifo is not empty!");
     
     assert property (tx_fifo_chk)
-    else $fatal("[Main controller] Transmitter fifo is not empty!");
+    else $info("[Main controller] Transmitter fifo is not empty!");
     
     assert property (fifos_op_chk)
-    else $fatal("[Main controller] The device can't send and read data in the same clock cycle!");
+    else $info("[Main controller] The device can't send and read data in the same clock cycle!");
 
     assert property (error_chk)
-    else $fatal("[Main controller] Fail on error flow!");
+    else $info("[Main controller] Fail on error flow!");
   end : assertions
 
 endmodule
