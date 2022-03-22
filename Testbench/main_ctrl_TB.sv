@@ -35,7 +35,7 @@
 // KEYWORDS : DUT INSTANTIATION, TESTBENCH BODY, MAIN
 // ------------------------------------------------------------------------------------
 
-`include "main_ctrl_Interface.sv"
+`include "main_ctrl_interface.sv"
 
 module main_ctrl_TB();
 
