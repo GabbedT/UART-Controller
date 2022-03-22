@@ -1,3 +1,40 @@
+// MIT License
+//
+// Copyright (c) 2021 Gabriele Tripi
+// 
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+// 
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+// ------------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------
+// FILE NAME : main_ctrl_TB.sv
+// DEPARTMENT : 
+// AUTHOR : Gabriele Tripi
+// AUTHOR'S EMAIL : tripi.gabriele2002@gmail.com
+// ------------------------------------------------------------------------------------
+// RELEASE HISTORY
+// VERSION : 1.0 
+// DESCRIPTION : Simple testbench to verify the main features of the UART controller
+// ------------------------------------------------------------------------------------
+// DEPENDENCIES : main_ctrl_Interface.sv
+//-------------------------------------------------------------------------------------
+// KEYWORDS : DUT INSTANTIATION, TESTBENCH BODY, MAIN
+// ------------------------------------------------------------------------------------
+
 `include "main_ctrl_Interface.sv"
 
 module main_ctrl_TB();
@@ -11,7 +48,7 @@ module main_ctrl_TB();
   /* Clock generation */
   always #5 clk_i = !clk_i;
 
-  main_ctrl_Interface intf(clk_i);
+  main_ctrl_interface intf(clk_i);
 
   main_controller DUT (
     .clk_i                 ( intf.clk_i                 ),
@@ -81,9 +118,6 @@ module main_ctrl_TB();
   /* Drive transactions when the uart is in main state */
   task deviceMainState(input int trxNumber);
     repeat(trxNumber) begin 
-      assert(trxPacket.randomize())
-      else $error("[%0dns] Failed randomization", $time);
- 
       /* Drive the signals that are useful during main state */
       $display("[%0dns] Driving transaction...", $time);
       intf.data_tx_i <= trxPacket.data.data_tx_i;
@@ -105,16 +139,6 @@ module main_ctrl_TB();
         intf.rx_fifo_empty_i <= 1'b0;
       end
 
-      trxPacket.data.data_tx_o = intf.data_tx_o;
-      trxPacket.error_o = intf.error_o;
-
-      assert(trxPacket.data.data_tx_i == trxPacket.data.data_tx_o)
-      else $error("[%0dns] Data tx output mismatch!", $time); 
-
-      if (trxPacket.frame_error_i | trxPacket.data.inject_error | trxPacket.overrun_error_i) begin 
-        assert(trxPacket.error_o != 0)
-        else $error("[%0dns] Error not detected!", $time); 
-      end
       /* Data received and transmitted is processed in more than 1 clock cycle, but
        * the controller is not dependant on baud rate clock */
       @(posedge intf.clk_i);
@@ -149,14 +173,6 @@ module main_ctrl_TB();
       $display("[%0dns] Configuration packet sended", $time); 
       intf.tx_done_i <= 1'b1;
       @(posedge intf.clk_i);
-      
-      trxPacket.data.data_tx_o = intf.data_tx_o;
-      case(i)
-        0: assert(trxPacket.data.data_tx_o == assemble_packet(DATA_WIDTH_ID, STD_DATA_WIDTH));
-        1: assert(trxPacket.data.data_tx_o == assemble_packet(PARITY_MODE_ID, STD_PARITY_MODE));
-        2: assert(trxPacket.data.data_tx_o == assemble_packet(STOP_BITS_ID, STD_STOP_BITS));
-        3: assert(trxPacket.data.data_tx_o == assemble_packet(END_CONFIGURATION_ID, 2'b0)); 
-      endcase
 
       /* (WAIT_ACKN_MST state) */
       $display("[%0dns] Waiting for acknowledgement packet...", $time); 
@@ -178,11 +194,7 @@ module main_ctrl_TB();
 
     intf.req_ackn_i <= 1'b1;
     $display("[%0dns] Request acknowledged", $time); 
-    repeat(2) @(posedge intf.clk_i);
-
-    trxPacket.data.data_tx_o = intf.data_tx_o;
-    assert(trxPacket.data.data_tx_o == ACKN_PKT)
-    else $error("[%0dns] Acknowledge packet not sended", $time); 
+    repeat(2) @(posedge intf.clk_i); 
 
     /* Done transmitting the acknowledgment packet */
     intf.req_ackn_i <= 1'b0;
@@ -207,8 +219,6 @@ module main_ctrl_TB();
       $display("[%0dns] Sending acknowledgemnt packet", $time); 
       intf.rx_fifo_empty_i <= 1'b1;
       @(posedge intf.clk_i);
-      assert(intf.data_tx_o == ACKN_PKT)
-      else $error("[%0dns] Acknowledge packet not sended", $time);
 
       /* Transmitter has done its task (WAIT_TX_SLV state) */
       intf.tx_done_i <= 1'b1;
@@ -222,8 +232,6 @@ module main_ctrl_TB();
 //  MAIN  //
 //--------//
 
-  /* Reset the device and verify it's behaviour in main state. Send a configuration
-   * request as a master,  */
   initial begin
     trxPacket = new();
     reset();
