@@ -28,7 +28,7 @@ void uart_initStd() {
     uart_setStdConfig();
 }
 
-void uart_init(uint32_t baudRate, uartDataWidth_t dataWidth, uartParityMode_t parityMode,uartStopBits_t stopBits, bool dataStreamMode, uint32_t threshold) {
+void uart_init(uint32_t baudRate, uartDataWidth_t dataWidth, uartParityMode_t parityMode, uartStopBits_t stopBits, bool dataStreamMode, uint32_t threshold) {
     uart_setBaudRate(baudRate);
     uart_setDataStreamMode(1);
     uart_setThresholdBuf(threshold);
