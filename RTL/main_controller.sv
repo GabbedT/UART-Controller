@@ -86,41 +86,26 @@ module main_controller
   output uart_error_s  error_o
 );
 
-  /* FSM next and current state */
+//--------------//
+//  PARAMETERS  //
+//--------------//
+
+  /* How many clock cycles does it need to reach 50 ms */ 
+  /* based on a specific system clock */
+  localparam COUNT_50MS = SYSTEM_CLOCK_FREQ / 20;
+
+  localparam ACKN_PKT = 8'hFF; 
+
+  /* Next and current state */
   localparam NXT = 1;
   localparam CRT = 0;
 
-//------------------//
-// CONTROLLER LOGIC //
-//------------------//
 
-    typedef enum logic [3:0] {
-      /* After reset signal, every register is resetted in standard configuration */
-      RESET,
-      /* Send configuration request */ 
-      CFG_REQ_MST,
-      /* If the device sees the initialization signal (10ms RX low) then send an acknowledgment packet */
-      SEND_ACKN_SLV,
-      /* Drive TX low to send the initialization signal */
-      SETUP_SLV,
-      /* Send data width packet */ 
-      SETUP_MST,
-      /* Wait transmitter to end its task */
-      WAIT_TX_MST,
-      WAIT_TX_SLV,
-      /* Wait request acknowledgment */
-      WAIT_REQ_ACKN_MST,
-      /* Wait for the acknowledgment data width packet */
-      WAIT_ACKN_MST,
-      /* Setup the device in standard configuration */
-      STD_CONFIG,
-      /* UART's main state */
-      MAIN
-  } main_control_fsm_e;
+//------------//
+//  DATAPATH  //
+//------------//
 
-  main_control_fsm_e [CRT:NXT] state;
-
-  logic [CRT:NXT][$clog2(COUNT_50MS) - 1:0] counter_50ms;
+  logic [NXT:CRT][$clog2(COUNT_50MS) - 1:0] counter_50ms;
 
       /* Counter to 50ms */
       always_ff @(posedge clk_i) begin : ms50_counter
@@ -134,17 +119,8 @@ module main_controller
       end : ms50_counter
 
 
-      always_ff @(posedge clk_i) begin : fsm_state_register
-        if (!rst_n_i) begin 
-          state[CRT] <= RESET;
-        end else begin 
-          state[CRT] <= state[NXT];
-        end
-      end : fsm_state_register
-
-
   /* Number of times the configuration failed */
-  logic [CRT:NXT][1:0] config_failed;
+  logic [NXT:CRT][1:0] config_failed;
   
       /* Count the number of times the device has tried to reques a configuration
        * and the slave device didn't respond (max 3 times) */
@@ -158,7 +134,7 @@ module main_controller
       
 
   /* Tracks the state of the configuration */
-  logic [CRT:NXT][1:0] config_packet_type;
+  logic [NXT:CRT][1:0] config_packet_type;
 
   localparam DW_TYPE = 2'b00;  /* Data width        */
   localparam PM_TYPE = 2'b01;  /* Parity mode       */
@@ -174,11 +150,52 @@ module main_controller
       end : next_cfg_packet_type
 
 
-      always_comb begin : next_state_logic 
+//-------------//
+//  FSM LOGIC  //
+//-------------//
 
-        //----------------//
-        // DEFAULT VALUES //
-        //----------------//
+  typedef enum logic [3:0] {
+    /* After reset signal, every register is resetted in standard configuration */
+    RESET,
+    /* Send configuration request */ 
+    CFG_REQ_MST,
+    /* If the device sees the initialization signal (10ms RX low) then send an acknowledgment packet */
+    SEND_ACKN_SLV,
+    /* Drive TX low to send the initialization signal */
+    SETUP_SLV,
+    /* Send data width packet */ 
+    SETUP_MST,
+    /* Wait transmitter to end the request or a configuration */
+    WAIT_TX_MST,
+    /* Wait transmitter to end sending acknowledgment packet */
+    WAIT_TX_SLV,
+    /* Wait request acknowledgment */
+    WAIT_REQ_ACKN_MST,
+    /* Wait for the acknowledgment data width packet */
+    WAIT_ACKN_MST,
+    /* Setup the device in standard configuration */
+    STD_CONFIG,
+    /* UART's main state */
+    MAIN
+  } main_control_fsm_e;
+
+
+  main_control_fsm_e [NXT:CRT] state;
+
+      always_ff @(posedge clk_i) begin : fsm_state_register
+        if (!rst_n_i) begin 
+          state[CRT] <= RESET;
+        end else begin 
+          state[CRT] <= state[NXT];
+        end
+      end : fsm_state_register
+
+
+      always_comb begin : fsm_next_state_logic 
+
+        //------------------//
+        //  DEFAULT VALUES  //
+        //------------------//
 
         /* Default next state logic */
         state[NXT] = state[CRT]; 
@@ -410,11 +427,11 @@ module main_controller
           end
 
         endcase
-      end : next_state_logic
+      end : fsm_next_state_logic
 
-//-----------------------//
-// ERROR DETECTION LOGIC //
-//-----------------------//
+//-------------------------//
+//  ERROR DETECTION LOGIC  //
+//-------------------------//
 
   assign error_o.overrun = overrun_error_i;
 
@@ -448,9 +465,9 @@ module main_controller
   assign error_o.frame = frame_error_i;
 
 
-//------------//
-// ASSERTIONS //
-//------------//
+//--------------//
+//  ASSERTIONS  //
+//--------------//
 
 /* Check that no operation is done during reset */
 sequence no_operation;
@@ -527,4 +544,4 @@ endproperty
     else $info("[Main controller] Fail on error flow!");
   end : assertions
 
-endmodule
+endmodule : main_controller

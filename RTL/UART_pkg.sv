@@ -25,21 +25,9 @@ package UART_pkg;
   localparam INT_CONFIG_REQ  = 4'b0110;
 
 
-//-----------------------------//
-//  MAIN CONTROLLER PARAMETERS //
-//-----------------------------//
-  
-  /* How many clock cycles does it need to reach 10 / 50 ms */ 
-  /* based on a specific system clock */
-  localparam COUNT_10MS = SYSTEM_CLOCK_FREQ / 100;
-  localparam COUNT_50MS = SYSTEM_CLOCK_FREQ / 20;
-
-  localparam ACKN_PKT = 8'hFF; 
-
-
-//-------------//
-// DATA PACKET //
-//-------------//
+//---------------//
+//  DATA PACKET  //
+//---------------//
 
   /*
    * Normally the data packet is just composed by 8 bit of data.
@@ -70,9 +58,9 @@ package UART_pkg;
   endfunction : assemble_packet
   
 
-//----------------------------//
-// PACKET WIDTH CONFIGURATION //
-//----------------------------//
+//------------------------------//
+//  PACKET WIDTH CONFIGURATION  //
+//------------------------------//
 
   /* Command ID */
   localparam logic [1:0] DATA_WIDTH_ID = 2'b01;
@@ -84,9 +72,9 @@ package UART_pkg;
   localparam logic [1:0] DW_8BIT = 2'b11;
 
 
-//---------------------------//
-// PARITY MODE CONFIGURATION //
-//---------------------------//
+//-----------------------------//
+//  PARITY MODE CONFIGURATION  //
+//-----------------------------//
 
   /* Command ID */
   localparam logic [1:0] PARITY_MODE_ID = 2'b10;
@@ -98,9 +86,9 @@ package UART_pkg;
   localparam logic [1:0] DISABLED2  = 2'b11;
 
 
-//-------------------------//
-// STOP BITS CONFIGURATION //
-//-------------------------// 
+//---------------------------//
+//  STOP BITS CONFIGURATION  //
+//---------------------------// 
 
   /* Command ID */
   localparam logic [1:0] STOP_BITS_ID = 2'b11;
@@ -112,16 +100,16 @@ package UART_pkg;
   localparam logic [1:0] RESERVED2 = 2'b11;
 
 
-//---------------------------//
-// END CONFIGURATION PROCESS //
-//---------------------------//
+//-----------------------------//
+//  END CONFIGURATION PROCESS  //
+//-----------------------------//
 
 
   localparam logic [1:0] END_CONFIGURATION_ID = 2'b00;
 
-//-------------------------//
-// ERROR AND CONFIGURATION //
-//-------------------------//
+//---------------------------//
+//  ERROR AND CONFIGURATION  //
+//---------------------------//
 
 
   /* Standard configuration */
@@ -129,7 +117,7 @@ package UART_pkg;
   localparam STD_STOP_BITS   = SB_1BIT;
   localparam STD_PARITY_MODE = EVEN;
 
-  localparam STD_CONFIGURATION = {STD_DATA_WIDTH, STD_PARITY_MODE, STD_STOP_BIT};
+  localparam STD_CONFIGURATION = {STD_DATA_WIDTH, STD_PARITY_MODE, STD_STOP_BITS};
   
   typedef struct packed {
     /* If the UART doesn't see a stop bit */
