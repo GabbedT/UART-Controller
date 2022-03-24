@@ -102,7 +102,7 @@ interface main_ctrl_interface (input logic clk_i);
     config_req_slv_i <= 1'b0;
     config_req_mst_i <= 1'b0;
     std_config_i <= 1'b0;
-    config_i <= STD_CONFIG;
+    config_i <= STD_CONFIGURATION;
     data_stream_mode_i <= 1'b0;
     req_ackn_i <= 1'b0;
   endtask : reset 
