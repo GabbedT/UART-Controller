@@ -30,11 +30,15 @@ void uart_initStd() {
 
 void uart_init(uint32_t baudRate, uartDataWidth_t dataWidth, uartParityMode_t parityMode,uartStopBits_t stopBits, bool dataStreamMode, uint32_t threshold) {
     uart_setBaudRate(baudRate);
-    uart_setDataStreamMode(dataStreamMode);
+    uart_setDataStreamMode(1);
     uart_setThresholdBuf(threshold);
+    uint8_t trashData;
 
-    /* Wait until the buffers are empty */
-    while ((!uart_rxEmpty()) && (!uart_txEmpty())) { }
+    /* Wait until the buffers are empty */  
+    while ((!uart_rxEmpty()) && (!uart_txEmpty())) {
+        trashData = gHandle->RXR;
+    }
+    uart_setDataStreamMode(dataStreamMode);
 
     /* Clear the configuration bit fields */
     uint8_t dataSTR = gHandle->STR;
