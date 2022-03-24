@@ -107,6 +107,6 @@ interface main_ctrl_interface (input logic clk_i);
     req_ackn_i <= 1'b0;
   endtask : reset 
 
-endinterface : main_ctrl_Interface
+endinterface : main_ctrl_interface
 
 `endif  
