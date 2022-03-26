@@ -163,16 +163,6 @@ module transmitter (
         end
       end : fsm_state_register
 
-  logic tx_done; 
-
-      always_ff @(posedge clk_i) begin 
-        if (!rst_n_i) begin 
-          tx_done_o <= 1'b0;
-        end else begin 
-          tx_done_o <= tx_done;
-        end
-      end
-
 
       always_comb begin : fsm_next_state_logic
 
@@ -188,7 +178,7 @@ module transmitter (
         bits_processed[NXT] = 3'b0;
 
         tx_line = IDLE;
-        tx_done = 1'b0;
+        tx_done_o = 1'b0;
         read_fifo = 1'b0;
         req_done_o = 1'b0;
 
@@ -206,11 +196,18 @@ module transmitter (
           end
 
           /* 
-           *  Set tx line to logic 0 for 10ms.
+           *  Set tx line to logic 0 for 10ms. If there is still data
+           *  in the FIFO, transmit it and then send the request. 
            */
           CFG_REQ: begin 
-            counter_10ms[NXT] = counter_10ms[CRT] + 1'b1;
-            tx_line = !TX_IDLE;
+            if (fifo_if.empty_o) begin
+              /* If FIFO is empty start sending the configuration request */
+              counter_10ms[NXT] = counter_10ms[CRT] + 1'b1;
+              tx_line = !TX_IDLE;
+            end else begin
+              /* Keep sending data until FIFO is empty */
+              state[NXT] = START;
+            end
 
             if (counter_10ms[CRT] == COUNT_10MS) begin 
               req_done_o = 1'b1;
@@ -276,17 +273,17 @@ module transmitter (
                 case (stop_bits_number_i)
                   SB_1BIT: begin 
                     state[NXT] = IDLE;
-                    tx_done = 1'b1;
+                    tx_done_o = 1'b1;
                   end
 
                   SB_2BIT: begin 
                     state[NXT] = (stop_bits[CRT]) ? IDLE : DONE;
-                    tx_done = stop_bits[CRT];
+                    tx_done_o = stop_bits[CRT];
                   end
 
                   default: begin 
                     state[NXT] = IDLE;
-                    tx_done = 1'b1;
+                    tx_done_o = 1'b1;
                   end
                 endcase
 
@@ -301,5 +298,30 @@ module transmitter (
         endcase
 
       end : fsm_next_state_logic
+
+
+//--------------//
+//  ASSERTIONS  //
+//--------------//
+
+/* After the device is done transmitting, lower the request signal */
+property req_done_chk;
+  @(posedge clk_i) req_done_o |=> !config_req_mst_i;
+endproperty
+
+/* While sending the request, the tx line must be stable */
+property tx_stable_chk;
+  @(posedge clk_i) ((fifo_if.empty_o) && (state[CRT] == CFG_REQ)) |-> (($stable(tx_o)) && (!tx_o));
+endproperty
+
+/* Send two stop bits. Tx should be high for 2 clock cycles */
+property two_stop_bits_chk;
+  @(posedge clk_i) ((state[CRT] == DONE) && (stop_bits_number_i == SB_2BIT)) |=> (tx_o[*2]); 
+endproperty
+
+/* The FIFO must not be written if it's full */
+property
+  @(posedge clk_i) fifo_if.full_o |-> !tx_fifo_write_i;
+endproperty
 
 endmodule : transmitter
