@@ -44,6 +44,7 @@ module main_ctrl_TB();
 //---------------------//
 
   bit clk_i, rst_n_i;
+  localparam ACKN_PKT = 8'hFF;
 
   /* Clock generation */
   always #5 clk_i = !clk_i;
