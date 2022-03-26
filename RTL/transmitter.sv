@@ -68,7 +68,7 @@ module transmitter (
       always_ff @(posedge clk_i) begin : data_register
         if (!rst_n_i) begin
           data_tx[CRT] <= 8'b0;
-        end else begin 
+        end else if (!fifo_if.empty_o) begin 
           data_tx[CRT] <= data_tx[NXT];
         end
       end : data_register
@@ -114,25 +114,25 @@ module transmitter (
   /* Number of data bits sended */
   logic [NXT:CRT][2:0] bits_processed; 
 
-      always_ff @(posedge clk_i) begin 
+      always_ff @(posedge clk_i) begin : data_bits_counter
         if (!rst_n_i) begin 
           bits_processed[CRT] <= 3'b0;
         end else begin 
           bits_processed[CRT] <= bits_processed[NXT];
         end
-      end
+      end : data_bits_counter
 
   
   /* Number of stop bits sended */
   logic [NXT:CRT] stop_bits;
 
-      always_ff @(posedge clk_i) begin 
+      always_ff @(posedge clk_i) begin : stop_bits_counter
         if (!rst_n_i) begin 
           stop_bits[CRT] <= 1'b0;
         end else begin 
           stop_bits[CRT] <= stop_bits[NXT];
         end
-      end
+      end : stop_bits_counter
 
 //-------------//
 //  FSM LOGIC  //
@@ -173,11 +173,11 @@ module transmitter (
         state[NXT] = state[CRT];
         data_tx[NXT] = data_tx[CRT];
         stop_bits[NXT] = stop_bits[CRT];
-        counter_br[NXT] = 4'b0;
-        counter_10ms[NXT] = 'b0;
-        bits_processed[NXT] = 3'b0;
+        counter_br[NXT] = counter_br[CRT];
+        counter_10ms[NXT] = counter_10ms[CRT];
+        bits_processed[NXT] = bits_processed[CRT];
 
-        tx_line = IDLE;
+        tx_line = TX_IDLE;
         tx_done_o = 1'b0;
         read_fifo = 1'b0;
         req_done_o = 1'b0;
@@ -185,29 +185,24 @@ module transmitter (
         case(state[CRT])
 
           /* 
-           *  The device is simply waiting for data to transmit.
+           *  The device is simply waiting for data to transmit. If there 
+           *  is a configuration request and FIFO is not empty, clear the 
+           *  buffer by transmitting all the data, then send the request.
            */
           IDLE: begin 
-            if (config_req_mst_i) begin 
-              state[NXT] = CFG_REQ;
-            end else if (!fifo_if.empty_o) begin 
+            if (!fifo_if.empty_o) begin 
               state[NXT] = START;
+            end else if (config_req_mst_i) begin 
+              state[NXT] = CFG_REQ;
             end
           end
 
           /* 
-           *  Set tx line to logic 0 for 10ms. If there is still data
-           *  in the FIFO, transmit it and then send the request. 
+           *  Set tx line to logic 0 for 10ms.  
            */
           CFG_REQ: begin 
-            if (fifo_if.empty_o) begin
-              /* If FIFO is empty start sending the configuration request */
-              counter_10ms[NXT] = counter_10ms[CRT] + 1'b1;
-              tx_line = !TX_IDLE;
-            end else begin
-              /* Keep sending data until FIFO is empty */
-              state[NXT] = START;
-            end
+            counter_10ms[NXT] = counter_10ms[CRT] + 1'b1;
+            tx_line = !TX_IDLE;
 
             if (counter_10ms[CRT] == COUNT_10MS) begin 
               req_done_o = 1'b1;
@@ -279,6 +274,7 @@ module transmitter (
                   SB_2BIT: begin 
                     state[NXT] = (stop_bits[CRT]) ? IDLE : DONE;
                     tx_done_o = stop_bits[CRT];
+                    stop_bits[NXT] = 1'b1;
                   end
 
                   default: begin 
@@ -287,7 +283,6 @@ module transmitter (
                   end
                 endcase
 
-                stop_bits[NXT] = 1'b1;
                 counter_br[NXT] = 4'b0;
               end else begin 
                 counter_br[NXT] = counter_br[CRT] + 1'b1;
@@ -309,9 +304,9 @@ property req_done_chk;
   @(posedge clk_i) req_done_o |=> !config_req_mst_i;
 endproperty
 
-/* While sending the request, the tx line must be stable */
+/* While sending the request, the tx line must be stable for 10ms */
 property tx_stable_chk;
-  @(posedge clk_i) ((fifo_if.empty_o) && (state[CRT] == CFG_REQ)) |-> (($stable(tx_o)) && (!tx_o));
+  @(posedge clk_i) ((fifo_if.empty_o) && (state[CRT] == CFG_REQ)) |-> (!tx_o[*COUNT_10MS]);
 endproperty
 
 /* Send two stop bits. Tx should be high for 2 clock cycles */
@@ -320,8 +315,32 @@ property two_stop_bits_chk;
 endproperty
 
 /* The FIFO must not be written if it's full */
-property
+property full_chk;
   @(posedge clk_i) fifo_if.full_o |-> !tx_fifo_write_i;
 endproperty
+
+/* Read FIFO only in start state */
+property read_chk;
+  @(posedge clk_i) (state[CRT] != START) |-> !fifo_if.read_i;
+endproperty
+
+  initial begin 
+    
+    assert property (req_done_chk)
+    else $display("Request done, the request signal wasn't deassert!");
+
+    assert property (tx_stable_chk)
+    else $display("Tx line not stable on low");
+
+    assert property (two_stop_bits_chk)
+    else $display("Error on sending 2 stop bits, tx line must be stable on high for 2 clock cycles");
+
+    assert property (full_chk)
+    else $display("Writing on full FIFO, data lost!");
+
+    assert property (read_chk)
+    else $display("Reading fifo while not sending start bits, data lost!");
+
+  end
 
 endmodule : transmitter
