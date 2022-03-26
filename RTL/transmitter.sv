@@ -35,6 +35,7 @@ module transmitter (
   /* TX line start */
   localparam TX_START = 0;
 
+  
 //-----------//
 //  TX FIFO  //
 //-----------//
@@ -134,6 +135,7 @@ module transmitter (
         end
       end : stop_bits_counter
 
+  
 //-------------//
 //  FSM LOGIC  //
 //-------------//
