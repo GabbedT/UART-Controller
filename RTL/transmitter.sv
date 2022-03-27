@@ -1,3 +1,44 @@
+// MIT License
+//
+// Copyright (c) 2021 Gabriele Tripi
+// 
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+// 
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+// ------------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------
+// FILE NAME : transmitter.sv
+// AUTHOR : Gabriele Tripi
+// AUTHOR'S EMAIL : tripi.gabriele2002@gmail.com
+// ------------------------------------------------------------------------------------
+// RELEASE HISTORY
+// VERSION : 1.0 
+// DESCRIPTION : This module contains the transmitter of the uart. It is composed by
+//               a main FSM and a FIFO buffer. The FSM takes care of the transaction
+//               timing and it can also initiate a configuration request (only if the 
+//               buffer is empty). The fifo will just hold the data so the device can 
+//               receive data to transmit while sending other transactions.
+//               The transmitter takes as input an oversampling baud rate clock that 
+//               has 16 times the frequency of the baud rate clock. 
+// ------------------------------------------------------------------------------------
+// KEYWORDS : PARAMETERS, TX FIFO, DATAPATH, FSM LOGIC, ASSERTIONS
+// ------------------------------------------------------------------------------------
+
+
 import UART_pkg::*;
 
 module transmitter (
@@ -9,6 +50,7 @@ module transmitter (
   input  logic         config_req_mst_i,
   input  logic [1:0]   data_width_i,
   input  logic [1:0]   stop_bits_number_i,
+  input  logic [1:0]   parity_mode_i,
 
   output logic         tx_o,
   output logic         tx_done_o,      
@@ -35,7 +77,6 @@ module transmitter (
   /* TX line start */
   localparam TX_START = 0;
 
-  
 //-----------//
 //  TX FIFO  //
 //-----------//
@@ -43,11 +84,7 @@ module transmitter (
   /* Interface declaration */
   sync_fifo_interface #(8) fifo_if(clk_i);
 
-  /* Read a word from FIFO */
-  logic read_fifo;
-
   assign fifo_if.wr_data_i = data_tx_i;
-  assign fifo_if.read_i = read_fifo;
   assign fifo_if.write_i = tx_fifo_write_i;
   assign fifo_if.rst_n_i = rst_n_i; 
 
@@ -135,7 +172,7 @@ module transmitter (
         end
       end : stop_bits_counter
 
-  
+
 //-------------//
 //  FSM LOGIC  //
 //-------------//
@@ -150,6 +187,8 @@ module transmitter (
     START,
     /* Transmit the data bits serially to the other device*/
     DATA,
+    /* Transmit parity bit */
+    PARITY,
     /* Send stop bits to end the transaction */
     DONE
   } transmitter_fsm_e;
@@ -181,10 +220,10 @@ module transmitter (
 
         tx_line = TX_IDLE;
         tx_done_o = 1'b0;
-        read_fifo = 1'b0;
+        fifo_if.read_i = 1'b0;
         req_done_o = 1'b0;
 
-        case(state[CRT])
+        case (state[CRT])
 
           /* 
            *  The device is simply waiting for data to transmit. If there 
@@ -192,6 +231,8 @@ module transmitter (
            *  buffer by transmitting all the data, then send the request.
            */
           IDLE: begin 
+            stop_bits[NXT] = 1'b0;
+
             if (!fifo_if.empty_o) begin 
               state[NXT] = START;
             end else if (config_req_mst_i) begin 
@@ -224,7 +265,7 @@ module transmitter (
               if (counter_br[CRT] == 4'd15) begin 
                 state[NXT] = DATA;
                 counter_br[NXT] = 4'b0;
-                read_fifo = 1'b1;
+                fifo_if.read_i = 1'b1;
                 data_tx[NXT] = fifo_if.rd_data_o;                
               end else begin 
                 counter_br[NXT] = counter_br[CRT] + 1'b1;
@@ -247,12 +288,42 @@ module transmitter (
                 counter_br[NXT] = 4'b0;
 
                 /* Send a fixed amount of bits based on configuration parameter */
-                case (data_width_i)  
-                  DW_5BIT:  state[NXT] = (bits_processed[CRT] == 4'd4) ? DONE : DATA;
-                  DW_6BIT:  state[NXT] = (bits_processed[CRT] == 4'd5) ? DONE : DATA;
-                  DW_7BIT:  state[NXT] = (bits_processed[CRT] == 4'd6) ? DONE : DATA;
-                  DW_8BIT:  state[NXT] = (bits_processed[CRT] == 4'd7) ? DONE : DATA;
-                endcase
+                if (parity_mode_i[1]) begin
+                  case (data_width_i)  
+                    DW_5BIT:  state[NXT] = (bits_processed[CRT] == 4'd4) ? DONE : DATA;
+                    DW_6BIT:  state[NXT] = (bits_processed[CRT] == 4'd5) ? DONE : DATA;
+                    DW_7BIT:  state[NXT] = (bits_processed[CRT] == 4'd6) ? DONE : DATA;
+                    DW_8BIT:  state[NXT] = (bits_processed[CRT] == 4'd7) ? DONE : DATA;
+                  endcase
+                end else begin 
+                  case (data_width_i)  
+                    DW_5BIT:  state[NXT] = (bits_processed[CRT] == 4'd4) ? PARITY : DATA;
+                    DW_6BIT:  state[NXT] = (bits_processed[CRT] == 4'd5) ? PARITY : DATA;
+                    DW_7BIT:  state[NXT] = (bits_processed[CRT] == 4'd6) ? PARITY : DATA;
+                    DW_8BIT:  state[NXT] = (bits_processed[CRT] == 4'd7) ? PARITY : DATA;
+                  endcase
+                end
+              end else begin 
+                counter_br[NXT] = counter_br[CRT] + 1'b1;
+              end
+            end
+          end
+
+          /* 
+           *  Send parity bit.
+           */
+          PARITY: begin 
+            case (parity_mode_i[0])
+              /* EVEN */
+              0: tx_line = (^data_tx[CRT]) ^ 1'b0;
+              /* ODD */
+              1: tx_line = (^data_tx[CRT]) ^ 1'b1;
+            endcase
+
+            if (ov_baud_rt_i) begin
+              if (counter_br[CRT] == 4'd15) begin 
+                counter_br[NXT] = 4'b0;
+                state[NXT] = DONE;
               end else begin 
                 counter_br[NXT] = counter_br[CRT] + 1'b1;
               end
@@ -264,6 +335,7 @@ module transmitter (
            */
           DONE: begin 
             tx_line = TX_IDLE;
+            bits_processed[NXT] = 3'b0;
 
             if (ov_baud_rt_i) begin 
               if (counter_br[CRT] == 4'd15) begin 

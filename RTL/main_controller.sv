@@ -22,7 +22,6 @@
 // ------------------------------------------------------------------------------------
 // ------------------------------------------------------------------------------------
 // FILE NAME : main_controller.sv
-// DEPARTMENT : 
 // AUTHOR : Gabriele Tripi
 // AUTHOR'S EMAIL : tripi.gabriele2002@gmail.com
 // ------------------------------------------------------------------------------------
@@ -42,8 +41,7 @@
 
 import UART_pkg::*;
 
-module main_controller 
-( 
+module main_controller ( 
   input  logic         rst_n_i,
   input  logic         clk_i,
   input  logic         interrupt_ackn_i,
