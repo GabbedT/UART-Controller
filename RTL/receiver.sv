@@ -1,3 +1,45 @@
+// MIT License
+//
+// Copyright (c) 2021 Gabriele Tripi
+// 
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+// 
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+// ------------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------
+// FILE NAME : transmitter.sv
+// AUTHOR : Gabriele Tripi
+// AUTHOR'S EMAIL : tripi.gabriele2002@gmail.com
+// ------------------------------------------------------------------------------------
+// RELEASE HISTORY
+// VERSION : 1.0 
+// DESCRIPTION : This module contains the receiver of the uart. It is composed by
+//               a main FSM and a FIFO buffer. The FSM takes care of the transaction
+//               timing and interrupt assertion. When the transmitter start a 
+//               configuration request the fifo keeps storing 0x00 with frame error
+//               until full. Once acknowledged, the uart will go into configuration
+//               process. 
+//               A threshold can be set and will be useful only in data stream mode,
+//               the receiver will interrupt once the fifo has receiven a certain 
+//               amount of data instead of every data byte.   
+// ------------------------------------------------------------------------------------
+// KEYWORDS : PARAMETERS, RX FIFO, DATAPATH, FSM LOGIC, ASSERTIONS
+// ------------------------------------------------------------------------------------
+
 import UART_pkg::*;
 
 module receiver (
@@ -6,10 +48,13 @@ module receiver (
   input  logic         ov_baud_rt_i,
   input  logic         rx_i,
   input  logic         rx_fifo_read_i,
+  input  logic         req_ackn_i,
+  input  logic [5:0]   threshold_i,
+  input  logic         data_stream_mode,
   input  logic [1:0]   data_width_i,
   input  logic [1:0]   stop_bits_number_i,
   input  logic [1:0]   parity_mode_i,
-
+ 
   output logic         rx_fifo_full_o,
   output logic         rx_fifo_empty_o,
   output logic         config_req_slv_o,
@@ -17,6 +62,7 @@ module receiver (
   output logic         frame_error_o,
   output logic         parity_o,
   output logic         rx_done_o,
+  output logic         rxd_rdy_interrupt_o,
   output logic [7:0]   data_rx_o
 );
 
@@ -41,24 +87,21 @@ module receiver (
   /* Index in fifo data */
   localparam FRAME = 8;
   localparam OVERRUN = 9;
-  localparam PARITY = 10;
+  localparam PARITY_BIT = 10;
 
 
 //-----------//
 //  RX FIFO  //
 //-----------//
 
+  /* Reset fifo if a configuration request is received */
+  logic fifo_rst_n;
+
   /* Interface declaration, 8 data bits, 2 error bits and 1 parity bit */
   sync_fifo_interface #(11) fifo_if(clk_i);
 
   assign fifo_if.read_i = rx_fifo_read_i;
-  assign fifo_if.rst_n_i = rst_n_i; 
-
-  /* Output assignment */
-  assign data_rx_o = fifo_if.rd_data_o[7:0];
-  assign frame_error_o = fifo_if.rd_data_o[FRAME];
-  assign overrun_error_o = fifo_if.rd_data_o[OVERRUN];
-  assign parity_o = fifo_if.rd_data_o[PARITY];
+  assign fifo_if.rst_n_i = rst_n_i | fifo_rst_n; 
 
   /* FIFO buffer instantiation in FWFT mode */
   sync_FIFO_buffer #(TX_FIFO_DEPTH, 1) tx_fifo (fifo_if);
@@ -72,11 +115,8 @@ module receiver (
 //------------//
 
   /* Data received */
-  logic [NXT:CRT][7:0] data_rx;
+  logic [7:0] data_rx[NXT:CRT];
 
-  assign fifo_if.wr_data_i[7:0] = data_rx[CRT];
-
-      /* Register the output to not lose data */
       always_ff @(posedge clk_i) begin : data_register
         if (!rst_n_i) begin
           data_rx[CRT] <= 8'b0;
@@ -86,10 +126,10 @@ module receiver (
       end : data_register
 
 
-  logic [NXT:CRT][$clog2(COUNT_10MS) - 1:0] counter_10ms;
+  /* Counter to determine the amount of time the RX line 
+   * stays low during configuration request */
+  logic [$clog2(COUNT_10MS) - 1:0] counter_10ms[NXT:CRT];
 
-      /* Counter to determine the amount of time the RX line 
-       * stays low during configuration request */
       always_ff @(posedge clk_i) begin : ms10_counter
         if (!rst_n_i) begin 
           counter_10ms[CRT] <= 'b0;
@@ -98,9 +138,19 @@ module receiver (
         end
       end : ms10_counter
 
+      always_comb begin : ms10_counter_logic
+        if (rx_i != RX_IDLE) begin 
+          counter_10ms[NXT] = counter_10ms[CRT] + 1'b1;
+        end else if (counter_10ms[CRT] == COUNT_10MS) begin 
+          counter_10ms[NXT] = 'b0;
+        end else begin 
+          counter_10ms[NXT] = 'b0;
+        end
+      end : ms10_counter_logic
+
   
   /* Counter for baudrate */
-  logic [NXT:CRT][3:0] counter_br;
+  logic [3:0] counter_br[NXT:CRT];
 
       always_ff @(posedge clk_i) begin : counter_baud_rt
         if (!rst_n_i) begin 
@@ -112,7 +162,7 @@ module receiver (
 
 
   /* Number of data bits received */
-  logic [NXT:CRT][2:0] bits_processed; 
+  logic [2:0] bits_processed[NXT:CRT]; 
 
       always_ff @(posedge clk_i) begin : data_bits_counter
         if (!rst_n_i) begin 
@@ -124,7 +174,7 @@ module receiver (
 
 
   /* Number of stop bits received */
-  logic [NXT:CRT] stop_bits_cnt;
+  logic stop_bits_cnt[NXT:CRT];
 
       always_ff @(posedge clk_i) begin : stop_bits_counter
         if (!rst_n_i) begin 
@@ -134,9 +184,9 @@ module receiver (
         end
       end : stop_bits_counter
 
-  
-  logic [NXT:CRT] parity_bit;
-  logic [NXT:CRT] stop_bits;
+ 
+  logic parity_bit[NXT:CRT];
+  logic stop_bits[NXT:CRT];
 
       always_ff @(posedge clk_i) begin 
         if (!rst_n_i) begin 
@@ -148,6 +198,67 @@ module receiver (
         end
       end
 
+  
+  /* In data stream mode the device will interrupt if a certain
+   * amount of data is received */
+  logic [5:0] fifo_threshold[NXT:CRT];
+
+      always_ff @(posedge clk_i) begin : threshold_counter
+        if (!rst_n_i) begin 
+          fifo_threshold[CRT] <= 'b0;
+        end else begin 
+          fifo_threshold[CRT] <= fifo_threshold[NXT];
+        end 
+      end : threshold_counter
+
+      always_comb begin : fifo_threshold_logic
+        case ({fifo_if.write_i, fifo_if.read_i})
+          /* Writing */
+          2'b10: fifo_threshold[NXT] =  fifo_threshold[CRT] + 1'b1;
+          /* Reading */
+          2'b01: fifo_threshold[NXT] =  fifo_threshold[CRT] - 1'b1;
+          /* Both or no operation */
+          default: fifo_threshold[NXT] =  fifo_threshold[CRT];
+        endcase
+      end : fifo_threshold_logic
+
+
+  /* Interrupt that assert if the fifo size hit the threshold (in data stream mode)
+   * or if data is received (in standard mode) */
+  logic rx_rdy_int[NXT:CRT];
+
+      always_ff @(posedge clk_i) begin : data_ready_interrupt_reg
+        if (!rst_n_i) begin 
+          rx_rdy_int[CRT] <= 1'b0;
+        end if (!data_stream_mode & fifo_if.read_i) begin 
+          /* Clear when reading data */
+          rx_rdy_int[CRT] <= 1'b0;
+        end else if (data_stream_mode & fifo_if.empty_o) begin 
+          /* Clear only if the fifo is empty */
+          rx_rdy_int[CRT] <= 1'b0;
+        end else begin 
+          rx_rdy_int[CRT] <= rx_rdy_int[NXT];
+        end
+      end : data_ready_interrupt_reg
+
+
+  /* Configuration process requested. The request will be asserted
+   * when the counter reaches the right value (RX low for 10ms) and
+   * deasserted when the request is acknowledged */
+  logic cfg_req[NXT:CRT];
+
+      always_ff @(posedge clk_i) begin 
+        if (!rst_n_i) begin 
+          cfg_req[CRT] <= 1'b0;
+        end else if (req_ackn_i) begin 
+          cfg_req[CRT] <= 1'b0;
+        end else begin 
+          cfg_req[CRT] <= cfg_req[NXT];
+        end
+      end
+
+  assign config_req_slv_o = cfg_req[CRT];
+
 
 //-------------//
 //  FSM LOGIC  //
@@ -156,19 +267,19 @@ module receiver (
   typedef enum logic [2:0] {
     /* The device is waiting for data */
     IDLE,
-    /* A configuration is being requested */
-    CFG_REQ,
     /* Sample start bit */
     START,
     /* Sample the data bits*/
     SAMPLE,
+    /* Sample parity bit */
+    PARITY,
     /* Sample stop bits to end the transaction */
     DONE
   } receiver_fsm_e;
 
 
   /* FSM current and next state */
-  transmitter_fsm_e [NXT:CRT] state;
+  receiver_fsm_e state[NXT:CRT];
 
       always_ff @(posedge clk_i) begin : fsm_state_register
         if (!rst_n_i) begin 
@@ -187,34 +298,24 @@ module receiver (
 
         state[NXT] = state[CRT];
         data_rx[NXT] = data_rx[CRT];
+        cfg_req[NXT] = cfg_req[CRT];
         stop_bits[NXT] = stop_bits[CRT];
-        stop_bits_cnt[NXT] = stop_bits_cnt[CRT];
         parity_bit[NXT] = parity_bit[CRT];
         counter_br[NXT] = counter_br[CRT];
+        rx_rdy_int[NXT] = rx_rdy_int[CRT];
+        stop_bits_cnt[NXT] = stop_bits_cnt[CRT];
         bits_processed[NXT] = bits_processed[CRT];
 
-        config_req_slv_o = 1'b0;
         rx_done_o = 1'b0;
         fifo_if.write_i = 1'b0;
+        fifo_rst_n = 1'b1;
 
-        if (rx_i != RX_IDLE) begin 
-          counter_10ms[NXT] = counter_10ms[CRT] + 1'b1;
-        end else begin 
-          counter_10ms[NXT] = 'b0;
-        end
-        
-        /* FIFO data assignment */
-        case (parity_mode_i)
-          EVEN:    fifo_if.wr_data_i[PARITY] = parity_bit[CRT] ^ 1'b0;
-          ODD:     fifo_if.wr_data_i[PARITY] = parity_bit[CRT] ^ 1'b1;
-          default: fifo_if.wr_data_i[PARITY] = 1'b0;
-        endcase
-
-        /* AND the stop bits with the RX line: if the first stop bits was 0
-         * then 'stop_bits[CRT]' would be 0 too generating a frame error. 
-         * The same goes for the single stop bit */
-        fifo_if.wr_data_i[FRAME] = !(stop_bits[CRT] & rx_i);
-        fifo_if.wr_data_i[OVERRUN] = fifo_if.full_o;
+        if (counter_10ms[CRT] == COUNT_10MS) begin 
+          cfg_req[NXT] = 1'b1;
+          state[NXT] = IDLE;
+          /* Reset fifo only if the request is acknowledged */
+          fifo_rst_n = !req_ackn_i;
+        end 
 
         case (state[CRT])
 
@@ -265,30 +366,37 @@ module receiver (
                  * the right */
                 data_rx[NXT] = {rx_i, data_rx[CRT][7:1]};
 
-                case (data_width_i) 
-                  DW_5BIT: begin
-                    state[NXT] = (bits_processed[CRT] == 4'd4) ? DONE : DATA;
-                    parity_bit[NXT] = ^data_rx[NXT][4:0];
-                  end
-
-                  DW_6BIT: begin 
-                    state[NXT] = (bits_processed[CRT] == 4'd5) ? DONE : DATA;
-                    parity_bit[NXT] = ^data_rx[NXT][5:0];
-                  end
-
-                  DW_7BIT: begin 
-                    state[NXT] = (bits_processed[CRT] == 4'd6) ? DONE : DATA;
-                    parity_bit[NXT] = ^data_rx[NXT][6:0];
-                  end
-
-                  DW_8BIT: begin 
-                    state[NXT] = (bits_processed[CRT] == 4'd7) ? DONE : DATA;
-                    parity_bit[NXT] = ^data_rx[NXT];
-                  end
-                endcase
+                if (parity_mode_i[1]) begin
+                  case (data_width_i) 
+                    DW_5BIT: state[NXT] = (bits_processed[CRT] == 4'd4) ? DONE : SAMPLE;
+                    DW_6BIT: state[NXT] = (bits_processed[CRT] == 4'd5) ? DONE : SAMPLE;
+                    DW_7BIT: state[NXT] = (bits_processed[CRT] == 4'd6) ? DONE : SAMPLE;
+                    DW_8BIT: state[NXT] = (bits_processed[CRT] == 4'd7) ? DONE : SAMPLE;
+                  endcase
+                end else begin 
+                  case (data_width_i) 
+                    DW_5BIT: state[NXT] = (bits_processed[CRT] == 4'd4) ? PARITY : SAMPLE;
+                    DW_6BIT: state[NXT] = (bits_processed[CRT] == 4'd5) ? PARITY : SAMPLE;
+                    DW_7BIT: state[NXT] = (bits_processed[CRT] == 4'd6) ? PARITY : SAMPLE;
+                    DW_8BIT: state[NXT] = (bits_processed[CRT] == 4'd7) ? PARITY : SAMPLE;
+                  endcase
+                end
               end
             end else begin 
               counter_br[NXT] = counter_br[CRT] + 1'b1;
+            end
+          end
+
+          /* 
+           *  Sample parity bit. 
+           */
+          PARITY: begin 
+            if (ov_baud_rt_i) begin 
+              if (counter_br[CRT] == 4'd15) begin 
+                counter_br[NXT] = 4'b0;
+                parity_bit[NXT] = rx_i;
+                state[NXT] = DONE;
+              end
             end
           end
 
@@ -297,6 +405,14 @@ module receiver (
            *  this time the RX line must be stable on IDLE.
            */
           DONE: begin  
+            /* Raise an interrupt */
+            if (data_stream_mode) begin 
+              rx_rdy_int[NXT] = (fifo_threshold[CRT] >= threshold_i);
+            end else begin 
+              rx_rdy_int[NXT] = 1'b1;
+            end
+
+
             if (ov_baud_rt_i) begin
               if (counter_br[CRT] == 4'd15) begin
                 /* AND the rx line with the stop bits so if in the
@@ -307,23 +423,90 @@ module receiver (
                 case (stop_bits_number_i)
                   SB_1BIT: begin 
                     state[NXT] = IDLE; 
-                    fifo_if.write_i = 1'b1;
+                    fifo_if.write_i = 1'b1 & !fifo_if.full_o;
                     rx_done_o = 1'b1;
                   end
 
                   SB_2BIT: begin 
                     stop_bits_cnt[NXT] = 1'b1;
                     state[NXT] = (stop_bits_cnt[CRT]) ? IDLE : DONE; 
-                    fifo_if.write_i = stop_bits_cnt[CRT];
+                    fifo_if.write_i = stop_bits_cnt[CRT] & !fifo_if.full_o;
                     rx_done_o = stop_bits_cnt[CRT];
                   end
-                  default:
+                  
+                  default: begin 
+                    state[NXT] = IDLE; 
+                    fifo_if.write_i = 1'b1 & !fifo_if.full_o;
+                    rx_done_o = 1'b1;
+                  end
                 endcase
               end
             end
           end
-
         endcase
       end
+
+
+      always_comb begin : fifo_write_data_assignment
+        fifo_if.wr_data_i[7:0] = data_rx[CRT];
+ 
+        case (parity_mode_i)
+          EVEN:    fifo_if.wr_data_i[PARITY_BIT] = parity_bit[CRT] ^ 1'b0;
+          ODD:     fifo_if.wr_data_i[PARITY_BIT] = parity_bit[CRT] ^ 1'b1;
+          default: fifo_if.wr_data_i[PARITY_BIT] = 1'b0;
+        endcase
+
+        /* AND the stop bits with the RX line: if the first stop bits was 0
+         * then 'stop_bits[CRT]' would be 0 too generating a frame error. 
+         * The same goes for the single stop bit. If uart is receiving 0x00
+         * then frame error is disabled */
+        fifo_if.wr_data_i[FRAME] = (data_rx[CRT] == 8'b0) ? 1'b0 : !(stop_bits[CRT] & rx_i);
+
+        /* Raise an overrun error if the fifo has reached the threshold level or
+         * the data has been received and the device is receiving other data */
+        fifo_if.wr_data_i[OVERRUN] = rx_rdy_int[CRT] & (state[CRT] != IDLE);
+      end : fifo_write_data_assignment
+
+  /* Output assignment */
+  assign data_rx_o = fifo_if.rd_data_o[7:0];
+  assign frame_error_o = fifo_if.rd_data_o[FRAME];
+  assign overrun_error_o = fifo_if.rd_data_o[OVERRUN];
+  assign parity_o = fifo_if.rd_data_o[PARITY_BIT];
+  assign rxd_rdy_interrupt_o = rx_rdy_int[CRT];
+
+
+//--------------//
+//  ASSERTIONS  //
+//--------------//
+
+  /* Reset FSM state with an acknowledge */
+  property req_ackn_state_chk;
+    @(posedge clk_i) ((counter_10ms[CRT] == COUNT_10MS) && req_ackn_i) |=> (state[CRT] == IDLE);
+  endproperty
+
+  /* While not in data stream mode, the interrupt must be asserted while receiving the stop bits */
+  property interrupt_raise_chk;
+    @(posedge clk_i) (!data_stream_mode && (state[CRT] == DONE)) |=> rxd_rdy_interrupt_o;
+  endproperty
+
+  /* The interrupt should be asserted till it's cleared with a read */
+  property interrupt_clear_chk;
+    @(posedge clk_) $rose(rxd_rdy_interrupt_o) && !data_stream_mode |=> (rxd_rdy_interrupt_o throughout rx_fifo_read_i [->1]) ##1 !rxd_rdy_interrupt_o;
+  endproperty
+
+  /* Check frame error detection */
+  property frame_error_chk;
+    @(posedge clk_i) (!rx_i && (state[CRT] == DONE)) |-> !fifo_if.wr_data_i[FRAME];
+  endproperty
+
+  /* Check threshold logic */
+  property threshold_empty_chk;
+    @(posedge clk_i) (threshold_counter[CRT] == 0) |-> fifo_if.empty_o;
+  endproperty
+
+  property threshold_full_chk;
+    @(posedge clk_i) (threshold_counter[CRT] == (RX_FIFO_DEPTH - 1)) |-> fifo_if.full_o;
+  endproperty
+
 
 endmodule : receiver

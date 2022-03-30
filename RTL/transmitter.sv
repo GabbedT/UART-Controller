@@ -100,7 +100,7 @@ module transmitter (
 //------------//
 
   /* Data to be transmitted */
-  logic [NXT:CRT][7:0] data_tx;
+  logic [7:0] data_tx[NXT:CRT];
 
       /* Register the output to not lose data */
       always_ff @(posedge clk_i) begin : data_register
@@ -112,7 +112,7 @@ module transmitter (
       end : data_register
 
 
-  logic [NXT:CRT][$clog2(COUNT_10MS) - 1:0] counter_10ms;
+  logic [$clog2(COUNT_10MS) - 1:0] counter_10ms[NXT:CRT];
 
       /* Counter to determine the amount of time the TX line 
        * must stay low during configuration request */
@@ -138,7 +138,7 @@ module transmitter (
 
   
   /* Counter for baudrate */
-  logic [NXT:CRT][3:0] counter_br;
+  logic [3:0] counter_br[NXT:CRT];
 
       always_ff @(posedge clk_i) begin : counter_baud_rt
         if (!rst_n_i) begin 
@@ -150,7 +150,7 @@ module transmitter (
 
 
   /* Number of data bits sended */
-  logic [NXT:CRT][2:0] bits_processed; 
+  logic [2:0] bits_processed[NXT:CRT]; 
 
       always_ff @(posedge clk_i) begin : data_bits_counter
         if (!rst_n_i) begin 
@@ -162,7 +162,7 @@ module transmitter (
 
   
   /* Number of stop bits sended */
-  logic [NXT:CRT] stop_bits;
+  logic stop_bits[NXT:CRT];
 
       always_ff @(posedge clk_i) begin : stop_bits_counter
         if (!rst_n_i) begin 
@@ -194,7 +194,7 @@ module transmitter (
   } transmitter_fsm_e;
 
   /* FSM current and next state */
-  transmitter_fsm_e [NXT:CRT] state;
+  transmitter_fsm_e state[NXT:CRT];
 
       always_ff @(posedge clk_i) begin : fsm_state_register
         if (!rst_n_i) begin 

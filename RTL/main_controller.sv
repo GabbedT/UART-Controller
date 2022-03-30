@@ -103,7 +103,7 @@ module main_controller (
 //  DATAPATH  //
 //------------//
 
-  logic [NXT:CRT][$clog2(COUNT_50MS) - 1:0] counter_50ms;
+  logic [$clog2(COUNT_50MS) - 1:0] counter_50ms[NXT:CRT];
 
       /* Counter to 50ms */
       always_ff @(posedge clk_i) begin : ms50_counter
@@ -118,7 +118,7 @@ module main_controller (
 
 
   /* Number of times the configuration failed */
-  logic [NXT:CRT][1:0] config_failed;
+  logic [1:0] config_failed[NXT:CRT];
   
       /* Count the number of times the device has tried to reques a configuration
        * and the slave device didn't respond (max 3 times) */
@@ -132,7 +132,7 @@ module main_controller (
       
 
   /* Tracks the state of the configuration */
-  logic [NXT:CRT][1:0] config_packet_type;
+  logic [1:0] config_packet_type[NXT:CRT];
 
   localparam DW_TYPE = 2'b00;  /* Data width        */
   localparam PM_TYPE = 2'b01;  /* Parity mode       */
@@ -178,7 +178,7 @@ module main_controller (
   } main_control_fsm_e;
 
 
-  main_control_fsm_e [NXT:CRT] state;
+  main_control_fsm_e state[NXT:CRT];
 
       always_ff @(posedge clk_i) begin : fsm_state_register
         if (!rst_n_i) begin 
