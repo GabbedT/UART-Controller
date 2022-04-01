@@ -11,6 +11,7 @@ module transmitter_tb();
   logic         config_req_mst_i;
   logic [1:0]   data_width_i;
   logic [1:0]   stop_bits_number_i;
+  logic [1:0]   parity_mode_i;
 
   /* Outputs */
   logic         tx_o;
@@ -50,6 +51,7 @@ module transmitter_tb();
     config_req_mst_i <= 1'b0;
     data_width_i <= $urandom_range(0, 3);
     stop_bits_number_i <= $urandom_range(0, 1);
+    parity_mode_i <= $urandom_range(0, 3);
 
     while (tx_fifo.size() != 2) begin 
       sendData($urandom());
