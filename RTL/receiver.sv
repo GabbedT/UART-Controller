@@ -101,7 +101,7 @@ module receiver (
   sync_fifo_interface #(11) fifo_if(clk_i);
 
   assign fifo_if.read_i = rx_fifo_read_i;
-  assign fifo_if.rst_n_i = rst_n_i | fifo_rst_n; 
+  assign fifo_if.rst_n_i = rst_n_i & fifo_rst_n; 
 
   /* FIFO buffer instantiation in FWFT mode */
   sync_FIFO_buffer #(TX_FIFO_DEPTH, 1) tx_fifo (fifo_if);
@@ -200,7 +200,10 @@ module receiver (
 
   
   /* In data stream mode the device will interrupt if a certain
-   * amount of data is received */
+   * amount of data is received. The counter will go from 0 
+   * (empty fifo) to FIFO_DEPTH - 1, if the programmer wants
+   * the device to interrupt when fifo is full, then the threshold
+   * must be set with the value 0. */
   logic [5:0] fifo_threshold[NXT:CRT];
 
       always_ff @(posedge clk_i) begin : threshold_counter
@@ -406,9 +409,13 @@ module receiver (
            */
           DONE: begin  
             /* Raise an interrupt */
-            if (data_stream_mode) begin 
+            if (data_stream_mode & (threshold_i != 'b0)) begin 
+              /* Interrupt if fifo size is greater or equal the threshold value */
               rx_rdy_int[NXT] = (fifo_threshold[CRT] >= threshold_i);
-            end else begin 
+            end else if (data_stream_mode & (threshold_i == 'b0)) begin 
+              /* Interrupt only if fifo is full */
+              rx_rdy_int[NXT] = fifo_if.full_o;    
+            end else begin
               rx_rdy_int[NXT] = 1'b1;
             end
 
@@ -491,7 +498,7 @@ module receiver (
 
   /* The interrupt should be asserted till it's cleared with a read */
   property interrupt_clear_chk;
-    @(posedge clk_) $rose(rxd_rdy_interrupt_o) && !data_stream_mode |=> (rxd_rdy_interrupt_o throughout rx_fifo_read_i [->1]) ##1 !rxd_rdy_interrupt_o;
+    @(posedge clk_i) $rose(rxd_rdy_interrupt_o) && !data_stream_mode |=> (rxd_rdy_interrupt_o throughout rx_fifo_read_i [->1]) ##1 !rxd_rdy_interrupt_o;
   endproperty
 
   /* Check frame error detection */
