@@ -15,14 +15,14 @@ package UART_pkg;
   localparam RX_FIFO_DEPTH = 64;
 
   /* Interrupt id */
-  localparam INT_NONE        = 4'b0000;
-  localparam INT_CONFIG_FAIL = 4'b0001;
-  localparam INT_OVERRUN     = 4'b0010;
-  localparam INT_PARITY      = 4'b0100;
-  localparam INT_FRAME       = 4'b1000;
-  localparam INT_RXD_RDY     = 4'b0011;
-  localparam INT_RX_FULL     = 4'b0101;
-  localparam INT_CONFIG_REQ  = 4'b0110;
+  localparam INT_TX_DONE     = 3'b000;
+  localparam INT_CONFIG_FAIL = 3'b001;
+  localparam INT_OVERRUN     = 3'b010;
+  localparam INT_PARITY      = 3'b011;
+  localparam INT_FRAME       = 3'b100;
+  localparam INT_RXD_RDY     = 3'b101;
+  localparam INT_RX_FULL     = 3'b110;
+  localparam INT_CONFIG_REQ  = 3'b111;
 
 
 //---------------//

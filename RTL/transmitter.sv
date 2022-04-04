@@ -48,6 +48,7 @@ module transmitter (
   input  logic [7:0]   data_tx_i,
   input  logic         tx_fifo_write_i,
   input  logic         config_req_mst_i,
+  input  logic         tx_data_stream_mode_i,
   input  logic [1:0]   data_width_i,
   input  logic [1:0]   stop_bits_number_i,
   input  logic [1:0]   parity_mode_i,
@@ -342,18 +343,18 @@ module transmitter (
                 case (stop_bits_number_i)
                   SB_1BIT: begin 
                     state[NXT] = IDLE;
-                    tx_done_o = 1'b1;
+                    tx_done_o = (tx_data_stream_mode_i) ? fifo_if.empty_o : 1'b1;
                   end
 
                   SB_2BIT: begin 
                     state[NXT] = (stop_bits[CRT]) ? IDLE : DONE;
-                    tx_done_o = stop_bits[CRT];
+                    tx_done_o = (tx_data_stream_mode_i) ? (fifo_if.empty_o & stop_bits[CRT]) : stop_bits[CRT];
                     stop_bits[NXT] = 1'b1;
                   end
 
                   default: begin 
                     state[NXT] = IDLE;
-                    tx_done_o = 1'b1;
+                    tx_done_o = (tx_data_stream_mode_i) ? fifo_if.empty_o : 1'b1;
                   end
                 endcase
 
