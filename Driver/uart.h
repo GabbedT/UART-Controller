@@ -21,7 +21,7 @@
 
     /* Interrupt code */
     typedef enum {
-        INT_NONE = 0b000,
+        INT_TX_DONE = 0b000,
         INT_CONFIG_FAIL = 0b001,
         INT_OVERRUN = 0b010,
         INT_PARITY = 0b011,
@@ -187,8 +187,11 @@ inline uint32_t uart_getParityMode();
 /* Get stop bits number configuration parameter */
 inline uint32_t uart_getStopBits();
 
-/* Get data stream mode configuration */
-inline bool uart_getDataStreamMode();
+/* Get data receiver stream mode configuration */
+inline bool uart_getRxDataStreamMode();
+
+/* Get data transmitter stream mode configuration */
+inline bool uart_getTxDataStreamMode();
 
 /* Set data width configuration parameter */
 inline void uart_setDataWidth(uint32_t dataWidth);
@@ -199,8 +202,11 @@ inline void uart_setParityMode(uint32_t parityMode);
 /* Set stop bits number configuration parameter */
 inline void uart_setStopBits(uint32_t stopBitsNumber);  
 
-/* Enable or disable data stream mode. */
-inline void uart_setDataStreamMode(bool dataStreamMode);
+/* Enable or disable receiver data stream mode. */
+inline void uart_setRxDataStreamMode(bool dataStreamMode);
+
+/* Enable or disable transmitter data stream mode. */
+inline void uart_setTxDataStreamMode(bool dataStreamMode);
 
 /* Send the maximum number of data the rx fifo can store before interrupting */
 inline void uart_setThresholdBuf(uint32_t threshold);

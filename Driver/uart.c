@@ -13,6 +13,9 @@
 
 void uart_setStdConfig() {
     gHandle->CTR |= STD_CONFIG;
+    uart_setBaudRate(9600);
+    uart_setDataStreamMode(false);
+    uart_setThresholdBuf(0);
 }
 
 
@@ -23,8 +26,6 @@ void uart_acknConfigReq() {
 
 void uart_initStd() {
     /* Set standard configuration bit */
-    uart_setBaudRate(9600);
-    uart_setThresholdBuf(64);
     uart_setStdConfig();
 }
 
@@ -51,10 +52,19 @@ void uart_init(uint32_t baudRate, uartDataWidth_t dataWidth, uartParityMode_t pa
 
     gHandle->STR = dataSTR;
 
+    /* Send 3 SYN character */
+    for (int i = 0; i < 3; i++) {
+        uart_sendByte(0x16);
+    }
+
     /* In this case the device will be the master, initiate a configuration process
      * by sending a configuration request. The device hardware will take care of the
      * devices intercommunication process.*/ 
+    gHandle->CTR |= CFG_REQ_MST;
     do { } while (!(gHandle->CTR & CFG_DONE));
+
+    /* Send another SYN character to reset the internal counters of the slave */
+    uart_sendByte(0x16);
 }   
 
 
@@ -96,7 +106,7 @@ const uint8_t uart_readByte() {
 
 const uint8_t* uart_readByteStream(size_t size) {
     /* Check if byte stream mode is enabled */
-    if (!(gHandle->STR & DATA_STREAM_MODE)) {
+    if (!(gHandle->STR & RX_DATA_STREAM_MODE)) {
         return NULL;
     } 
 
@@ -120,7 +130,7 @@ const uint8_t* uart_readByteStream(size_t size) {
 
 const char* uart_readString() {
     /* Check if byte stream mode is enabled */
-    if (!(gHandle->STR & DATA_STREAM_MODE)) {
+    if (!(gHandle->STR & RX_DATA_STREAM_MODE)) {
         return NULL;
     } 
 
@@ -206,8 +216,12 @@ uint32_t uart_getStopBits() {
 }
 
 
-bool uart_getDataStreamMode() {
-    return (gHandle->STR & DATA_STREAM_MODE) >> 6;
+bool uart_getRxDataStreamMode() {
+    return (gHandle->STR & RX_DATA_STREAM_MODE) >> 6;
+}
+
+bool uart_getTxDataStreamMode() {
+    return (gHandle->STR & TX_DATA_STREAM_MODE) >> 6;
 }
 
 
@@ -231,13 +245,17 @@ void uart_setStopBits(uint32_t stopBits) {
 }
 
 
-void uart_setDataStreamMode(bool dataStreamMode) {
-    gHandle->STR = (gHandle->STR & ~(DATA_STREAM_MODE)) | (dataStreamMode << 6);
+void uart_setRxDataStreamMode(bool dataStreamMode) {
+    gHandle->STR = (gHandle->STR & ~(RX_DATA_STREAM_MODE)) | (dataStreamMode << 6);
+}
+
+void uart_setTxDataStreamMode(bool dataStreamMode) {
+    gHandle->STR = (gHandle->STR & ~(TX_DATA_STREAM_MODE)) | (dataStreamMode << 6);
 }
 
 
 void uart_setThresholdBuf(uint32_t threshold) {
-    if (threshold >= RX_FIFO_SIZE) {
+    if ((threshold >= RX_FIFO_SIZE) || (threshold == 0)) {
         return;
     }
     gHandle->STR = (gHandle->STR & ~(FIFO_THRESHOLD)) | threshold;
@@ -282,7 +300,10 @@ void uart_interruptServiceRoutine() {
     uartInterruptID_t intID = (uartInterruptID_t) uart_getID();
     uint8_t trashValue;
 
-    if (intID == INT_CONFIG_FAIL) {
+    if (intID == INT_TX_DONE) {
+        gHandle->ISR |= INT_ACKN;
+        return;
+    }else if (intID == INT_CONFIG_FAIL) {
         gHandle->configFailed = true;
         return;
     } else if (intID == INT_OVERRUN) {

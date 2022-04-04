@@ -17,9 +17,9 @@
 #define TXR_ADDR   7       /*  Data Transmitted Register  */
 
 
-//----------------//
-//  STR REGISTER  //
-//----------------//
+//----------------// 
+//  STR REGISTER  // 
+//----------------// 
 
 /* 
  *  STR Register bit fields 
@@ -29,16 +29,16 @@
  *  [1:0] | Data width configuration ID                   | R / W       |
  *  [3:2] | Parity configuration ID                       | R / W       | 
  *  [5:4] | Stop bits number configuration ID             | R / W       | 
- *  [6]   | Data stream mode enable                       | R / W       |
- *  [7]   | Interrupt acknowledge                         | W           | 
+ *  [6]   | RX data stream mode enable                    | R / W       |
+ *  [7]   | TX data stream mode enable                    | R / W       | 
  * -----------------------------------------------------------------------
  */
 
 #define DATA_WIDTH          0x03
 #define PARITY_MODE         0x0C
 #define STOP_BITS           0x30
-#define DATA_STREAM_MODE    0x40
-#define INT_ACKN            0x80
+#define RX_DATA_STREAM_MODE 0x40
+#define TX_DATA_STREAM_MODE 0x80
 
 
 //----------------//
@@ -89,14 +89,14 @@
  * -------------------------------------------------------------------------
  *  Bits    | Description                                   | Access mode |
  * -------------------------------------------------------------------------  
- *  [0]     | Configuration requested (SLAVE)               | R           |
+ *  [0]     | Send configuration request                    | W           |
  *  [1]     | Set standard configuration                    | W           |
  *  [2]     | Acknowledge configuration request             | W           |
  *  [3]     | Configuration done                            | R           |
  * -------------------------------------------------------------------------
  */
 
-#define CFG_REQ_SLV  0x01
+#define CFG_REQ_MST  0x01
 #define STD_CONFIG   0x02
 #define ACKN_CFG     0x04
 #define CFG_DONE     0x08
@@ -111,7 +111,7 @@
  * ----------------------------------------------------------------------------------------------------
  *  Bits   | Description                          | Access mode |                                    |
  * ----------------------------------------------------------------------------------------------------
- *  [0]    | Interrupt pending                    | R           |                                    |
+ *  [0]    | Interrupt acknowledge                | W           |                                    |
  *  [3:1]  | Interrupt code                       | R           |                                    |
  *  [4]    | Overrun error interrupt enable       | W           |                                    |
  *  [5]    | Parity error interrupt enable        | W           |                                    |
@@ -123,7 +123,7 @@
  * ----------------------------------------------------------------------------------------------------
  *  Cause                   | Priority | ID   | Clears                                               | 
  * ----------------------------------------------------------------------------------------------------
- *  None                    | None     | 000  | None                                                 |
+ *  Transmission done       | 3        | 000  | Acknowledge interrupt                                |
  * ----------------------------------------------------------------------------------------------------
  *  Configuration error     | 1        | 001  | Send another configuration request                   |
  * ----------------------------------------------------------------------------------------------------
@@ -137,14 +137,14 @@
  *                          |          |      | Data stream mode: The fifo has reached his threshold |
  *                          |          |      | read RXR till the buffer is empty.                   |
  * ----------------------------------------------------------------------------------------------------
- *  Receiver fifo full      | 2        | 110  | Standard mode: read RXR.                               |
+ *  Receiver fifo full      | 2        | 110  | Standard mode: read RXR.                             |
  *                          |          |      | Data stream mode: read RXR till the buffer is empty. | 
  * ----------------------------------------------------------------------------------------------------  
  *  Requested configuration | 2        | 111 | Acknowledge the request or let the request expire.    |
  * ----------------------------------------------------------------------------------------------------                        
  */
 
-#define INT_PEND   0x01
+#define INT_ACKN   0x01
 #define INT_ID     0x0E
 #define INT_OVR_EN 0x10
 #define INT_PAR_EN 0x20
