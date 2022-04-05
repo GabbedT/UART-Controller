@@ -105,7 +105,6 @@
 
 
 <br />
-<br />
 
   ## Divisor Register (DVR)
 
@@ -118,7 +117,6 @@
   **LOWER ADDRESS** : 1  
   **UPPER ADDRESS** : 2
 
-<br />
 <br />
 
   ## FIFO Status Register (FSR)
@@ -141,7 +139,6 @@
 
 
 <br />
-<br />
 
   ## Control Register (CTR)
 
@@ -160,7 +157,6 @@
   | STDC   | `(W)`       | Set standard configuration.
   | SREQ   | `(W)`       | Send configuration request, the device in this case become master.
 
-<br />
 <br />
 
   ## Interrupt Status Register (ISR)
@@ -197,7 +193,6 @@
 
 
 <br />
-<br />
 
   ## Data Received Register (RXR)
 
@@ -214,12 +209,11 @@
 
   
 <br />
-<br />
 
   ## Data Transmitted Register (TXR)
 
   ![TXR](Images/TXR.PNG)
-  
+
   The Data Transmitted Register holds the data that will be sent by the transmitter. 
 
   ### Fields Description
