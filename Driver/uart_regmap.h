@@ -93,6 +93,7 @@
  *  [1]     | Set standard configuration                    | W           |
  *  [2]     | Acknowledge configuration request             | W           |
  *  [3]     | Configuration done                            | R           |
+ *  [4]     | Enable configuration request                  | R / W       | 
  * -------------------------------------------------------------------------
  */
 
@@ -100,6 +101,7 @@
 #define STD_CONFIG   0x02
 #define ACKN_CFG     0x04
 #define CFG_DONE     0x08
+#define EN_CFG_REQ   0x10
 
 
 //----------------//

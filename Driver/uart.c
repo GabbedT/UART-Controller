@@ -300,8 +300,10 @@ void uart_interruptServiceRoutine() {
     uartInterruptID_t intID = (uartInterruptID_t) uart_getID();
     uint8_t trashValue;
 
+    /* Acknowledge interrupt */
+    gHandle->ISR |= INT_ACKN;
+    
     if (intID == INT_TX_DONE) {
-        gHandle->ISR |= INT_ACKN;
         return;
     }else if (intID == INT_CONFIG_FAIL) {
         gHandle->configFailed = true;
