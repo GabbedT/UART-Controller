@@ -27,9 +27,12 @@
   - [Data Transmitted Register (TXR)](#data-transmitted-register-txr)
     - [Fields Description](#fields-description-5)
 - [Operations](#operations)
+  - [Configuration](#configuration)
+    - [Enable configuration request](#enable-configuration-request)
+    - [Transmitter Data Stream Mode](#transmitter-data-stream-mode)
+    - [Receiver Data Stream Mode](#receiver-data-stream-mode)
   - [Transmission](#transmission)
   - [Reception](#reception)
-  - [Configuration](#configuration)
 - [References](#references)
 
 # Introduction
@@ -152,6 +155,7 @@
 
   | Field  | Access Mode | Description |
   | ------ | ----------- | ----------- |
+  | ENREQ  | `(R/W)`     | Enable the configuration process 
   | CDONE  | `(R)`       | The configuration process has ended, this bit **must be polled** during every configuration process (both master and slave).
   | AKREQ  | `(W)`       | Acknowledge the configuration request sended by the master device, the device become slave.
   | STDC   | `(W)`       | Set standard configuration.
@@ -161,7 +165,7 @@
 
   ## Interrupt Status Register (ISR)
 
-  ![CTR](Images/ISR.PNG)
+  ![ISR](Images/ISR.PNG)
 
   The Interrupt Status Register contains the interrupt status and enable bits as well as a vector that give the cause of the interruption.
 
@@ -222,14 +226,36 @@
   | ------- | ----------- | ------------- | 
   | DATA TX | `(W)`       | Data to be transmitted |
 
+<br />
 
 # Operations
 
+  ## Configuration
+
+  ### Enable configuration request
+
+  The programmer can choose between **two configuration modes** by setting or clearing the `ENREQ` bit in the `CTR` register. 
+  
+  If the bit is setted, then when a configuration parameter is changed (Data Width, Parity Mode or Stop Bits Number), the device respond by sending the new configuration to the other device. If the other device doesn't have the autoconfiguration feature, the programmer can clear the bit so the device doesn't start any configuration process.
+
+  ### Transmitter Data Stream Mode
+
+  The programmer can enable or disable the **data stream mode** by setting or clearing the `TDSM` bit in the `STR` register.
+
+  If the data stream mode is **disabled**, once the transmission of a packet of data ended, the device will interrupt. If the programmer wants to send a stream of data, interrupting every packet would slow the processor. **Data stream mode** can be enabled in this case: the processor will usually write a burst of data into the `TX FIFO`, then continue its task. The UART will transmit all the data until the FIFO will be **empty**, at this point the device will interrupt.
+
+  ### Receiver Data Stream Mode
+
+  The programmer can enable or disable the **data stream mode** by setting or clearing the `RDSM` bit in the `STR` register.
+  
+  If the data stream mode is not enabled, the device will
+  interrupt everytime a new transaction is received. If enabled, the device will interrupt when the `RX FIFO` is full. The `RX THRESHOLD` value can be used to vary the number of transaction received before interrupting, if the value is set to zero, then the device will interrupt when the FIFO is full
+
   ## Transmission
 
-  ## Reception
+  Data can be sent serially by writing it in the `TXR` register. *Once the transmitter ended its task, the device will interrupt*. Multiple write can occour in the `TXR` while the transmitter is sending data, the data written in this case will be memorized in the `TX FIFO`.
 
-  ## Configuration  
+  ## Reception  
 
 
 # References
