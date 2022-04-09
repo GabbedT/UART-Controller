@@ -2,15 +2,15 @@
 - [Table of contents](#table-of-contents)
 - [Introduction](#introduction)
   - [Features](#features)
-  - [Block Diagram](#block-diagram)
 - [Architecture](#architecture)
+  - [Block Diagram](#block-diagram)
+    - [Top Level View](#top-level-view)
   - [Signal Description](#signal-description)
   - [Configuration Protocol](#configuration-protocol)
   - [Main Controller](#main-controller)
   - [Receiver](#receiver)
   - [Transmitter](#transmitter)
   - [Baud Rate Generator](#baud-rate-generator)
-  - [Interrupt](#interrupt)
 - [Registers](#registers)
   - [Status Register (STR)](#status-register-str)
     - [Fields Description](#fields-description)
@@ -39,11 +39,16 @@
 
   ## Features
 
-  ## Block Diagram
 
 
 
 # Architecture
+
+  ## Block Diagram
+
+  ### Top Level View
+
+  ![PACKAGE](Images/Package.png)
 
   ## Signal Description
   
@@ -56,8 +61,6 @@
   ## Transmitter
   
   ## Baud Rate Generator
-
-  ## Interrupt 
 
 
 
@@ -257,5 +260,6 @@
 
   ## Reception  
 
+  Once received and the device interrupted, the data can be retrieved through the `RXR` register, every time this operation occours, the FIFO will write the next data into the register. This will happen until the FIFO is empty.
 
 # References
