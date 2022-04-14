@@ -51,6 +51,18 @@
   ![PACKAGE](Images/Package.png)
 
   ## Signal Description
+
+  | Signal  | Direction | Description |
+  | ------- | --------- | ----------- |
+  | D0 - D7 | Input / Output | Data bus | 
+  | A0 - A2 | Input          | Address bus for registers |
+  | WR      | Input          | Write signal |
+  | RD      | Input          | Read signal  |
+  | TX      | Output         | Transmitter data line |
+  | RX      | Input          | Receiver data line | 
+  | <ins>RST</ins> | Input   | Reset active low  | 
+  | VDD | Input              | Power supply |
+  | GND | Input              | Ground       | 
   
   ## Configuration Protocol
 
@@ -239,7 +251,7 @@
 
   The programmer can choose between **two configuration modes** by setting or clearing the `ENREQ` bit in the `CTR` register. 
   
-  If the bit is setted, then when a configuration parameter is changed (Data Width, Parity Mode or Stop Bits Number), the device respond by sending the new configuration to the other device. If the other device doesn't have the autoconfiguration feature, the programmer can clear the bit so the device doesn't start any configuration process.
+  If the bit is setted, then when a configuration parameter is changed (Data Width, Parity Mode or Stop Bits Number), the device respond by sending the new configuration to the other device. Multiple parameters can be changed with a single configuration request by simply accessing the register one single time, writing 2 or more time the register to set up parameters will lead to multiple configuration request.
 
   ### Transmitter Data Stream Mode
 
