@@ -67,15 +67,15 @@ module baud_rate_generator #(
   /* Counter for oversampling */
   logic [DVSR_WIDTH - 1:0] counter_ov;
 
-  /* Counter that ticks 16 times the baudrate */
-  always_ff @(posedge clk_i) begin : counter_16_br
-    if (!rst_n_i) begin 
-      counter_ov <= 'b0; 
-    end else begin  
-      /* Reset if the counter reach the divisor value */
-      counter_ov <= (counter_ov == divisor_i) ? 'b0 : counter_ov + 1'b1;
-    end
-  end : counter_16_br
+      /* Counter that ticks 16 times the baudrate */
+      always_ff @(posedge clk_i) begin : counter_16_br
+        if (!rst_n_i) begin 
+          counter_ov <= 'b0; 
+        end else begin  
+          /* Reset if the counter reach the divisor value */
+          counter_ov <= (counter_ov == divisor_i) ? 'b0 : counter_ov + 1'b1;
+        end
+      end : counter_16_br
 
   /* The counter counts from 0 to divisor value so it actually counts divisor + 1 times
    * thus the clock generated should tick only when it reach the value 1 */

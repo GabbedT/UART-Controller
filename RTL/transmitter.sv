@@ -107,7 +107,7 @@ module transmitter (
       always_ff @(posedge clk_i) begin : data_register
         if (!rst_n_i) begin
           data_tx[CRT] <= 8'b0;
-        end else if (!fifo_if.empty_o) begin 
+        end else begin 
           data_tx[CRT] <= data_tx[NXT];
         end
       end : data_register

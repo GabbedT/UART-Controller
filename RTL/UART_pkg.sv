@@ -24,6 +24,10 @@ package UART_pkg;
   localparam INT_RX_FULL     = 3'b110;
   localparam INT_CONFIG_REQ  = 3'b111;
 
+  /* Number of SYN character received to detect the 
+   * start of the configuration request */
+  localparam SYN_NUMBER = 3;
+
 
 //---------------//
 //  DATA PACKET  //
@@ -56,6 +60,9 @@ package UART_pkg;
   function logic [7:0] assemble_packet(input logic [1:0] id, input logic [1:0] option);
     return {4'b0, option, id};
   endfunction : assemble_packet
+
+  /* ASCII synchronous idle character */
+  localparam SYN = 8'h16;
   
 
 //------------------------------//

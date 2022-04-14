@@ -148,6 +148,18 @@ module main_controller (
       end : next_cfg_packet_type
 
 
+  /* Count the number of SYN character sended */
+  logic [$clog2(SYN_NUMBER) - 1:0] syn_data_cnt[NXT:CRT];
+
+      always_ff @(posedge clk_i) begin : syn_counter
+        if (!rst_n_i) begin 
+          syn_data_cnt[CRT] <= 2'b0;
+        end else begin 
+          syn_data_cnt[CRT] <= syn_data_cnt[NXT];
+        end
+      end : syn_counter
+
+
 //-------------//
 //  FSM LOGIC  //
 //-------------//
@@ -200,6 +212,7 @@ module main_controller (
         counter_50ms[NXT] = 'b0;
         config_failed[NXT] = 'b0;
         config_packet_type[NXT] = config_packet_type[CRT];
+        syn_data_cnt[NXT] = 'b0;
 
         /* Configuration signals */
         STR_en_o = 1'b0;
@@ -268,11 +281,20 @@ module main_controller (
            *  the TX line to a non IDLE state for 10ms. Go to the next stage only if the 
            *  transmitter has finished requesting.
            */
-          CFG_REQ_MST: begin 
-            config_req_mst_o = 1'b1;
+          CFG_REQ_MST: begin
+            /* Send 3 SYN characters */
+            if (syn_data_cnt[CRT] != SYN_NUMBER) begin 
+              tx_fifo_write_o = 1'b1;
+              data_tx_o = SYN;
+              syn_data_cnt[NXT] = syn_data_cnt[CRT] + 1'b1;
+            end else begin
+              config_req_mst_o = 1'b1;
 
-            if (req_done_i) begin
-              state[NXT] = WAIT_REQ_ACKN_MST;
+              if (req_done_i) begin
+                tx_fifo_write_o = 1'b1;
+                data_tx_o = SYN;                
+                state[NXT] = (tx_done_i) ? WAIT_REQ_ACKN_MST : CFG_REQ_MST;
+              end
             end
           end
 
