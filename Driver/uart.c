@@ -201,17 +201,17 @@ void uart_sendString(const char *string) {
 //  UART CONFIGURATION  //
 //----------------------//
 
-uint32_t uart_getDataWidth() {
+uartDataWidth_t uart_getDataWidth() {
     return (gHandle->STR & DATA_WIDTH);
 }
 
 
-uint32_t uart_getParityMode() {
+uartParityMode_t uart_getParityMode() {
     return (gHandle->STR & PARITY_MODE) >> 2;
 }
 
 
-uint32_t uart_getStopBits() {
+uartStopBits_t uart_getStopBits() {
     return (gHandle->STR & STOP_BITS) >> 4;
 }
 
@@ -230,17 +230,17 @@ uint32_t uart_getThresholdBuf() {
 }
 
 
-void uart_setDataWidth(uint32_t dataWidth) {
+void uart_setDataWidth(uartDataWidth_t dataWidth) {
     gHandle->STR = (gHandle->STR & ~(DATA_WIDTH)) | (dataWidth);
 }
 
 
-void uart_setParityMode(uint32_t parityMode) {
+void uart_setParityMode(uartParityMode_t parityMode) {
     gHandle->STR = (gHandle->STR & ~(PARITY_MODE)) | (parityMode << 2);
 }
 
 
-void uart_setStopBits(uint32_t stopBits) {
+void uart_setStopBits(uartStopBits_t stopBits) {
     gHandle->STR = (gHandle->STR & ~(STOP_BITS)) | (stopBits << 4);
 }
 
@@ -259,6 +259,26 @@ void uart_setThresholdBuf(uint32_t threshold) {
         return;
     }
     gHandle->STR = (gHandle->STR & ~(FIFO_THRESHOLD)) | threshold;
+}
+
+
+void uart_setCommunicationMode(uartCommMode_t commMode) {
+    gHandle->STR = (gHandle->STR & ~(COMM_MODE)) | (commMode << 5);
+}
+
+
+uartCommMode_t uart_getCommunicationMode() {
+    return (gHandle->STR & COMM_MODE) >> 5;
+}
+
+
+void uart_setReceivingCfgReq(bool enableRecReq) {
+    gHandle->STR = (gHandle->STR & ~(EN_CFG_REQ)) | (enableRecReq << 4);
+}
+
+
+bool uart_getReceivingCfgReq() {
+    return (gHandle->STR & EN_CFG_REQ) >> 4;
 }
 
 

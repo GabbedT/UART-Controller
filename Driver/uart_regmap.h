@@ -94,6 +94,7 @@
  *  [2]     | Acknowledge configuration request             | W           |
  *  [3]     | Configuration done                            | R           |
  *  [4]     | Enable configuration request                  | R / W       | 
+ *  [6:5]   | Configure communication mode                  | R / W       |             
  * -------------------------------------------------------------------------
  */
 
@@ -102,6 +103,7 @@
 #define ACKN_CFG     0x04
 #define CFG_DONE     0x08
 #define EN_CFG_REQ   0x10
+#define COMM_MODE    0x60
 
 
 //----------------//
@@ -127,13 +129,13 @@
  * ----------------------------------------------------------------------------------------------------
  *  Transmission done       | 3        | 000  | Acknowledge interrupt                                |
  * ----------------------------------------------------------------------------------------------------
- *  Configuration error     | 1        | 001  | Send another configuration request                   |
+ *  Configuration error     | 1        | 001  | Acknowledge interrupt                                |
  * ----------------------------------------------------------------------------------------------------
  *  Overrun error           | 1        | 010  | Read the data            	                           |
  * ----------------------------------------------------------------------------------------------------
- *  Parity error            | 1        | 011  | Read the data            	                           |
+ *  Frame error             | 1        | 011  | Read the data            	                           |
  * ----------------------------------------------------------------------------------------------------
- *  Frame error             | 1        | 100  | Read the data            	                           |
+ *  Parity error            | 1        | 100  | Read the data            	                           |
  * ----------------------------------------------------------------------------------------------------
  *  Data received ready     | 3        | 101  | Standard mode: read RXR.                             |
  *                          |          |      | Data stream mode: The fifo has reached his threshold |
