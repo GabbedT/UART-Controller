@@ -19,6 +19,7 @@
     - [Fields Description](#fields-description-1)
   - [Control Register (CTR)](#control-register-ctr)
     - [Fields Description](#fields-description-2)
+    - [**COM FIELD**](#com-field)
   - [Interrupt Status Register (ISR)](#interrupt-status-register-isr)
     - [Fields Description](#fields-description-3)
     - [Interrupt Table](#interrupt-table)
@@ -170,11 +171,21 @@
 
   | Field  | Access Mode | Description |
   | ------ | ----------- | ----------- |
-  | ENREQ  | `(R/W)`     | Enable the configuration process 
+  | COM    | `(R/W)`     | Communication mode. 
+  | ENREQ  | `(R/W)`     | Enable the configuration process. 
   | CDONE  | `(R)`       | The configuration process has ended, this bit **must be polled** during every configuration process (both master and slave).
   | AKREQ  | `(W)`       | Acknowledge the configuration request sended by the master device, the device become slave.
   | STDC   | `(W)`       | Set standard configuration.
   | SREQ   | `(W)`       | Send configuration request, the device in this case become master.
+
+  ### **COM FIELD**
+
+  | Value       | Description |
+  | ----------- | ----------- |
+  | `00`        | Disabled communication.     | 
+  | `01`        | Simplex TX only. | 
+  | `10`        | Simplex RX only. | 
+  | `11`        | Full-Duplex. | 
 
 <br />
 
@@ -195,18 +206,18 @@
   | PAR    | `(R/W)`     | Enable interrupt on parity error. |
   | OVR    | `(R/W)`     | Enable interrupt on overrun error. |
   | INTID  | `(R)`       | Returns the interrupt ID with the highest priority.
-  | IACK   | `(W)`       | Set this bit to acknowledge the interrupt, once it's cleared (the interrupt), the bit is resetted automatically
+  | IACK   | `(W)`       | Set this bit to acknowledge the interrupt, once it's cleared (the interrupt), the bit is resetted automatically.
 
   ### Interrupt Table
 
   | Cause   | Priority | ID      | Clear       |
   | ------- | -------- | ------- | ----------- |
   | Transmission done | 3 | `000` | Acknowledge interrupt
-  | Configuration error | 1 | `001` | Send another configuration request 
+  | Configuration error | 1 | `001` | Acknowledge interrupt 
   | Overrun error | 1 | `010` | Read the data
-  | Parity error | 1 | `011` | Read the data
-  | Frame error | 1 | `100` | Read the data 
-  | Data received ready | 3 | `101` | Standard mode: read RXR. Data stream mode: The fifo has reached his threshold read RXR till the buffer is empty.
+  | Frame error | 1 | `011` | Read the data
+  | Parity error | 1 | `100` | Read the data 
+  | Data received ready | 3 | `101` | Standard mode: read RXR. Data stream mode: the fifo has reached his threshold read RXR till the buffer is empty.
   | Receiver fifo full | 2 | `110` | Standard mode: read RXR. Data stream mode: read RXR till the buffer is empty.
   | Requested configuration | 2 | `111` | Acknowledge the request or let the request expire.
 
