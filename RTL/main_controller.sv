@@ -62,6 +62,8 @@ module main_controller (
   input  logic         rx_fifo_read_i,
   input  logic         tx_fifo_write_i,
   /* Configuration */
+  input  logic [1:0]   communication_mode_i,
+  input  logic         enable_cfg_receive_i,
   input  logic         config_req_slv_i,
   input  logic         config_req_mst_i,
   input  logic         std_config_i,
@@ -75,6 +77,8 @@ module main_controller (
   output logic         data_stream_mode_o,
   output logic         configuration_done_o,
   output logic         req_ackn_o,
+  output logic         tx_enable,
+  output logic         rx_enable,
   /* FIFO operations */
   output logic         rx_fifo_read_o,
   output logic         tx_fifo_write_o,
@@ -200,6 +204,9 @@ module main_controller (
         end
       end : fsm_state_register
 
+  logic config_req_slv;
+
+  assign config_req_slv = config_req_slv_i & enable_cfg_receive_i;
 
       always_comb begin : fsm_next_state_logic 
 
@@ -266,7 +273,7 @@ module main_controller (
             tx_fifo_write_o = tx_fifo_write_i;
 
             /* If the other device requested a configuration setup (current device = SLAVE) */
-            if (config_req_slv_i & req_ackn_i) begin 
+            if (config_req_slv & req_ackn_i) begin 
               state[NXT] = SEND_ACKN_SLV;
             end else if (config_req_mst_i) begin 
               /* If the current device request a configuration setup (current device = MASTER) */
@@ -449,6 +456,7 @@ module main_controller (
         endcase
       end : fsm_next_state_logic
 
+
 //-------------------------//
 //  ERROR DETECTION LOGIC  //
 //-------------------------//
@@ -483,6 +491,14 @@ module main_controller (
       end : parity_detection_logic
 
   assign error_o.frame = frame_error_i;
+
+
+//---------------------//
+//  COMMUNICATION MODE //
+//---------------------//
+
+  assign tx_enable = communication_mode_i[0];
+  assign rx_enable = communication_mode_i[1];
 
 
 //--------------//

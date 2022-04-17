@@ -45,6 +45,7 @@ import UART_pkg::*;
 module receiver (
   input  logic         clk_i,
   input  logic         rst_n_i,
+  input  logic         enable,
   input  logic         ov_baud_rt_i,
   input  logic         rx_i,
   input  logic         rx_fifo_read_i,
@@ -345,7 +346,7 @@ module receiver (
             stop_bits_cnt[NXT] = 1'b0;
             stop_bits[NXT] = 1'b0;
 
-            if (rx_i != RX_IDLE) begin 
+            if ((rx_i != RX_IDLE) & enable) begin 
               counter_16br[NXT] = 4'b0;
               state[NXT] = (syn_data_cnt[CRT] == SYN_NUMBER) ? CONFIG_REQ : START;
             end

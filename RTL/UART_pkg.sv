@@ -18,11 +18,17 @@ package UART_pkg;
   localparam INT_TX_DONE     = 3'b000;
   localparam INT_CONFIG_FAIL = 3'b001;
   localparam INT_OVERRUN     = 3'b010;
-  localparam INT_PARITY      = 3'b011;
-  localparam INT_FRAME       = 3'b100;
+  localparam INT_FRAME       = 3'b011;
+  localparam INT_PARITY      = 3'b100;
   localparam INT_RXD_RDY     = 3'b101;
   localparam INT_RX_FULL     = 3'b110;
   localparam INT_CONFIG_REQ  = 3'b111;
+
+  /* Communication mode */
+  localparam DISABLED    = 2'b00;
+  localparam SIMPLEX_TX  = 2'b01;
+  localparam SIMPLEX_RX  = 2'b10;
+  localparam FULL_DUPLEX = 2'b11;
 
   /* Number of SYN character received to detect the 
    * start of the configuration request */

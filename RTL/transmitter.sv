@@ -44,6 +44,7 @@ import UART_pkg::*;
 module transmitter (
   input  logic         clk_i,
   input  logic         rst_n_i,
+  input  logic         enable,
   input  logic         ov_baud_rt_i,
   input  logic [7:0]   data_tx_i,
   input  logic         tx_fifo_write_i,
@@ -234,7 +235,7 @@ module transmitter (
           IDLE: begin 
             stop_bits[NXT] = 1'b0;
 
-            if (!fifo_if.empty_o) begin 
+            if (!fifo_if.empty_o & enable) begin 
               state[NXT] = START;
             end else if (config_req_mst_i) begin 
               state[NXT] = CFG_REQ;
