@@ -187,7 +187,7 @@
   | STDC   | `(W)`       | Set standard configuration.
   | SREQ   | `(W)`       | Send configuration request, the device in this case become master.
 
-  ### COM Field
+  **COM Field**
 
   | Value       | Description |
   | ----------- | ----------- |
