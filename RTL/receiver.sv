@@ -63,7 +63,7 @@ module receiver (
   output logic         frame_error_o,
   output logic         parity_o,
   output logic         rx_done_o,
-  output logic         rxd_rdy_interrupt_o,
+  output logic         rxd_rdy_o,
   output logic [7:0]   data_rx_o
 );
 
@@ -117,13 +117,41 @@ module receiver (
   /* Data received */
   logic [7:0] data_rx[NXT:CRT];
 
-      always_ff @(posedge clk_i) begin : data_register
+  /* Counter for data oversampling (16 times the baudrate) */
+  logic [3:0] counter_16br[NXT:CRT];
+
+  /* Number of data bits received */
+  logic [2:0] bits_processed[NXT:CRT];
+
+  /* Number of stop bits received */
+  logic stop_bits_cnt[NXT:CRT];
+
+  /* Store parity and stop bits of data received */
+  logic parity_bit[NXT:CRT];
+  logic stop_bits[NXT:CRT];
+
+  /* Count the amount of consecuteve SYN character received */
+  logic [$clog2(SYN_NUMBER) - 1:0] syn_data_cnt[NXT:CRT];
+
+      always_ff @(posedge clk_i) begin
         if (!rst_n_i) begin
           data_rx[CRT] <= 8'b0;
+          counter_16br[CRT] <= 4'b0;
+          bits_processed[CRT] <= 3'b0;
+          stop_bits_cnt[CRT] <= 1'b0;
+          parity_bit[CRT] <= 1'b0;
+          stop_bits[CRT] <= 1'b1;
+          syn_data_cnt[CRT] <= 2'b0;
         end else begin 
           data_rx[CRT] <= data_rx[NXT];
+          counter_16br[CRT] <= counter_16br[NXT];
+          bits_processed[CRT] <= bits_processed[NXT];
+          stop_bits_cnt[CRT] <= stop_bits_cnt[NXT];
+          parity_bit[CRT] <= parity_bit[NXT];
+          stop_bits[CRT] <= stop_bits[NXT];
+          syn_data_cnt[CRT] <= syn_data_cnt[NXT];
         end
-      end : data_register
+      end 
 
 
   /* Counter to determine the amount of time the RX line 
@@ -147,57 +175,6 @@ module receiver (
           counter_10ms[NXT] = 'b0;
         end
       end : ms10_counter_logic
-
-  
-  /* Counter for data oversampling (16 times the baudrate) */
-  logic [3:0] counter_16br[NXT:CRT];
-
-      always_ff @(posedge clk_i) begin : counter_baud_rt
-        if (!rst_n_i) begin 
-          counter_16br[CRT] <= 4'b0;
-        end else begin 
-          counter_16br[CRT] <= counter_16br[NXT];
-        end 
-      end : counter_baud_rt
-
-
-  /* Number of data bits received */
-  logic [2:0] bits_processed[NXT:CRT]; 
-
-      always_ff @(posedge clk_i) begin : data_bits_counter
-        if (!rst_n_i) begin 
-          bits_processed[CRT] <= 3'b0;
-        end else begin 
-          bits_processed[CRT] <= bits_processed[NXT];
-        end
-      end : data_bits_counter
-
-
-  /* Number of stop bits received */
-  logic stop_bits_cnt[NXT:CRT];
-
-      always_ff @(posedge clk_i) begin : stop_bits_counter
-        if (!rst_n_i) begin 
-          stop_bits_cnt[CRT] <= 1'b0;
-        end else begin 
-          stop_bits_cnt[CRT] <= stop_bits_cnt[NXT];
-        end
-      end : stop_bits_counter
-
-  
-  /* Store parity and stop bits of data received */
-  logic parity_bit[NXT:CRT];
-  logic stop_bits[NXT:CRT];
-
-      always_ff @(posedge clk_i) begin 
-        if (!rst_n_i) begin 
-          parity_bit[CRT] <= 1'b0;
-          stop_bits[CRT] <= 1'b1;
-        end else begin 
-          parity_bit[CRT] <= parity_bit[NXT];
-          stop_bits[CRT] <= stop_bits[NXT];
-        end
-      end
 
   
   /* In data stream mode the device will interrupt if a certain
@@ -225,18 +202,6 @@ module receiver (
           default: fifo_size_cnt[NXT] = fifo_size_cnt[CRT];
         endcase
       end : fifo_size_counter_logic
-
-
-  /* Count the amount of consecuteve SYN character received */
-  logic [$clog2(SYN_NUMBER) - 1:0] syn_data_cnt[NXT:CRT];
-
-      always_ff @(posedge clk_i) begin : syn_counter
-        if (!rst_n_i) begin 
-          syn_data_cnt[CRT] <= 2'b0;
-        end else begin 
-          syn_data_cnt[CRT] <= syn_data_cnt[NXT];
-        end
-      end : syn_counter
 
 
   /* Interrupt that assert if the fifo size hit the threshold (in data stream mode)
@@ -531,13 +496,31 @@ module receiver (
 
   /* Output assignment */
   assign data_rx_o = fifo_if.rd_data_o[7:0];
-  assign frame_error_o = fifo_if.rd_data_o[FRAME];
-  assign overrun_error_o = fifo_if.rd_data_o[OVERRUN];
-  assign parity_o = fifo_if.rd_data_o[PARITY_BIT];
-  assign rxd_rdy_interrupt_o = rx_rdy_int[CRT];
+  assign rxd_rdy_o = rx_rdy_int[CRT];
 
-  /* Rx ready interrupt already signal that fifo is full if the threshold is set to 0 */
-  assign rx_fifo_full_o = (rx_data_stream_mode_i & (threshold_i == 6'b0)) ? 1'b0 : fifo_if.full_o;
+  /* Should be asserted for only 1 clock cycle */
+  assign frame_error_o = fifo_if.rd_data_o[FRAME] & rx_fifo_read_i;
+  assign overrun_error_o = fifo_if.rd_data_o[OVERRUN] & rx_fifo_read_i;
+  assign parity_o = fifo_if.rd_data_o[PARITY_BIT] & rx_fifo_read_i;
+
+
+//---------------------------//
+//  FIFO FULL EDGE DETECTOR  //
+//---------------------------//
+
+  logic rx_full;
+
+      always_ff @(posedge clk_i) begin 
+        if (!rst_n_i) begin 
+          rx_full <= 1'b0;
+        end else begin 
+          rx_full <= fifo_if.full_o;
+        end
+      end
+
+  /* Detect the rising edge of fifo full signal. If the threshold is set to 0 and DSM is active, the signal 'rxd_rdy_o'
+   * already signal the fifo being full. */
+  assign rx_fifo_full_o = (rx_data_stream_mode_i & (threshold_i == 6'b0)) ? 1'b0 : (fifo_if.full_o & (!rx_full));
 
 
 //--------------//
@@ -551,12 +534,12 @@ module receiver (
 
   /* While not in data stream mode, the interrupt must be asserted while receiving the stop bits */
   property interrupt_raise_chk;
-    @(posedge clk_i) (!rx_data_stream_mode_i && (state[CRT] == DONE)) |=> rxd_rdy_interrupt_o;
+    @(posedge clk_i) (!rx_data_stream_mode_i && (state[CRT] == DONE)) |=> rxd_rdy_o;
   endproperty
 
   /* The interrupt should be asserted till it's cleared with a read */
   property interrupt_clear_chk;
-    @(posedge clk_i) $rose(rxd_rdy_interrupt_o) && !rx_data_stream_mode_i |=> (rxd_rdy_interrupt_o throughout rx_fifo_read_i [->1]) ##1 !rxd_rdy_interrupt_o;
+    @(posedge clk_i) $rose(rxd_rdy_o) && !rx_data_stream_mode_i |=> (rxd_rdy_o throughout rx_fifo_read_i [->1]) ##1 !rxd_rdy_o;
   endproperty
 
   /* Check frame error detection */
