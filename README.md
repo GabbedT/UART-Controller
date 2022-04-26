@@ -210,7 +210,7 @@
 
   | Field  | Access Mode | Description |
   | ------ | ----------- | ----------- |
-  | RXRDY  | `(R/W)`     | Enable interrupt on data received (works with and withoud data stream mode). |
+  | RXRDY  | `(R/W)`     | Enable interrupt on data received (works with and without data stream mode). |
   | FRM    | `(R/W)`     | Enable interrupt on frame error. |
   | PAR    | `(R/W)`     | Enable interrupt on parity error. |
   | OVR    | `(R/W)`     | Enable interrupt on overrun error. |
