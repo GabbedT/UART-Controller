@@ -19,7 +19,6 @@
     - [Fields Description](#fields-description-1)
   - [Control Register (CTR)](#control-register-ctr)
     - [Fields Description](#fields-description-2)
-    - [COM Field](#com-field)
   - [Interrupt Status Register (ISR)](#interrupt-status-register-isr)
     - [Fields Description](#fields-description-3)
     - [Interrupt Table](#interrupt-table)
