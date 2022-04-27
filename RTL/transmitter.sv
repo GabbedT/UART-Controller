@@ -69,15 +69,6 @@ module transmitter (
   /* based on a specific system clock */
   localparam COUNT_10MS = SYSTEM_CLOCK_FREQ / 100;
 
-  /* Next and current state */
-  localparam NXT = 1;
-  localparam CRT = 0;
-
-  /* TX line in idle state */
-  localparam TX_IDLE = 1;
-
-  /* TX line start */
-  localparam TX_START = 0;
 
 //-----------//
 //  TX FIFO  //
@@ -179,28 +170,12 @@ module transmitter (
 //  FSM LOGIC  //
 //-------------//
 
-  typedef enum logic [2:0] {
-    /* The device is waiting for data */
-    IDLE,
-    /* Send a configuration request */
-    CFG_REQ,
-    /* Inform the other device that data is arriving
-     * by sending a start bit */
-    START,
-    /* Transmit the data bits serially to the other device*/
-    DATA,
-    /* Transmit parity bit */
-    PARITY,
-    /* Send stop bits to end the transaction */
-    DONE
-  } transmitter_fsm_e;
-
   /* FSM current and next state */
-  transmitter_fsm_e state[NXT:CRT];
+  fsm_pkg::transmitter_fsm_e state[NXT:CRT];
 
       always_ff @(posedge clk_i) begin : fsm_state_register
         if (!rst_n_i) begin 
-          state[CRT] <= IDLE;
+          state[CRT] <= TX_IDLE;
         end else begin 
           state[CRT] <= state[NXT];
         end
@@ -232,26 +207,26 @@ module transmitter (
            *  is a configuration request and FIFO is not empty, clear the 
            *  buffer by transmitting all the data, then send the request.
            */
-          IDLE: begin 
+          TX_IDLE: begin 
             stop_bits[NXT] = 1'b0;
 
             if (!fifo_if.empty_o & enable) begin 
-              state[NXT] = START;
+              state[NXT] = TX_START;
             end else if (config_req_mst_i) begin 
-              state[NXT] = CFG_REQ;
+              state[NXT] = TX_CFG_REQ;
             end
           end
 
           /* 
            *  Set tx line to logic 0 for 10ms.  
            */
-          CFG_REQ: begin 
+          TX_CFG_REQ: begin 
             counter_10ms[NXT] = counter_10ms[CRT] + 1'b1;
-            tx_line = !TX_IDLE;
+            tx_line = !TX_LINE_IDLE;
 
             if (counter_10ms[CRT] == COUNT_10MS) begin 
               req_done_o = 1'b1;
-              state[NXT] = IDLE;
+              state[NXT] = TX_IDLE;
               counter_10ms[NXT] = 'b0;
             end
           end
@@ -260,12 +235,12 @@ module transmitter (
            *  Send start bit the the receiver device and load the data
            *  register with the data to be transmitted.
            */
-          START: begin 
-            tx_line = TX_START;
+          TX_START: begin 
+            tx_line = !TX_LINE_IDLE;
 
             if (ov_baud_rt_i) begin 
               if (counter_br[CRT] == 4'd15) begin 
-                state[NXT] = DATA;
+                state[NXT] = TX_DATA;
                 counter_br[NXT] = 4'b0;
                 fifo_if.read_i = 1'b1;
                 data_tx[NXT] = fifo_if.rd_data_o;                
@@ -278,7 +253,7 @@ module transmitter (
           /* 
            *  Send data bits serially, every 16 tick process the next bit of data.
            */
-          DATA: begin 
+          TX_DATA: begin 
             tx_line = data_tx[CRT][0];
 
             if (ov_baud_rt_i) begin 
@@ -292,17 +267,17 @@ module transmitter (
                 /* Send a fixed amount of bits based on configuration parameter */
                 if (parity_mode_i[1]) begin
                   case (data_width_i)  
-                    DW_5BIT:  state[NXT] = (bits_processed[CRT] == 4'd4) ? DONE : DATA;
-                    DW_6BIT:  state[NXT] = (bits_processed[CRT] == 4'd5) ? DONE : DATA;
-                    DW_7BIT:  state[NXT] = (bits_processed[CRT] == 4'd6) ? DONE : DATA;
-                    DW_8BIT:  state[NXT] = (bits_processed[CRT] == 4'd7) ? DONE : DATA;
+                    DW_5BIT:  state[NXT] = (bits_processed[CRT] == 4'd4) ? TX_DONE : TX_DATA;
+                    DW_6BIT:  state[NXT] = (bits_processed[CRT] == 4'd5) ? TX_DONE : TX_DATA;
+                    DW_7BIT:  state[NXT] = (bits_processed[CRT] == 4'd6) ? TX_DONE : TX_DATA;
+                    DW_8BIT:  state[NXT] = (bits_processed[CRT] == 4'd7) ? TX_DONE : TX_DATA;
                   endcase
                 end else begin 
                   case (data_width_i)  
-                    DW_5BIT:  state[NXT] = (bits_processed[CRT] == 4'd4) ? PARITY : DATA;
-                    DW_6BIT:  state[NXT] = (bits_processed[CRT] == 4'd5) ? PARITY : DATA;
-                    DW_7BIT:  state[NXT] = (bits_processed[CRT] == 4'd6) ? PARITY : DATA;
-                    DW_8BIT:  state[NXT] = (bits_processed[CRT] == 4'd7) ? PARITY : DATA;
+                    DW_5BIT:  state[NXT] = (bits_processed[CRT] == 4'd4) ? TX_PARITY : TX_DATA;
+                    DW_6BIT:  state[NXT] = (bits_processed[CRT] == 4'd5) ? TX_PARITY : TX_DATA;
+                    DW_7BIT:  state[NXT] = (bits_processed[CRT] == 4'd6) ? TX_PARITY : TX_DATA;
+                    DW_8BIT:  state[NXT] = (bits_processed[CRT] == 4'd7) ? TX_PARITY : TX_DATA;
                   endcase
                 end
               end else begin 
@@ -314,7 +289,7 @@ module transmitter (
           /* 
            *  Send parity bit.
            */
-          PARITY: begin 
+          TX_PARITY: begin 
             case (parity_mode_i[0])
               /* EVEN */
               0: tx_line = (^data_tx[CRT]) ^ 1'b0;
@@ -325,7 +300,7 @@ module transmitter (
             if (ov_baud_rt_i) begin
               if (counter_br[CRT] == 4'd15) begin 
                 counter_br[NXT] = 4'b0;
-                state[NXT] = DONE;
+                state[NXT] = TX_DONE;
               end else begin 
                 counter_br[NXT] = counter_br[CRT] + 1'b1;
               end
@@ -335,26 +310,26 @@ module transmitter (
           /* 
            *  Send stop bits to end the transaction.
            */
-          DONE: begin 
-            tx_line = TX_IDLE;
+          TX_DONE: begin 
+            tx_line = TX_LINE_IDLE;
             bits_processed[NXT] = 3'b0;
 
             if (ov_baud_rt_i) begin 
               if (counter_br[CRT] == 4'd15) begin 
                 case (stop_bits_number_i)
                   SB_1BIT: begin 
-                    state[NXT] = IDLE;
+                    state[NXT] = TX_IDLE;
                     tx_done_o = (tx_data_stream_mode_i) ? fifo_if.empty_o : 1'b1;
                   end
 
                   SB_2BIT: begin 
-                    state[NXT] = (stop_bits[CRT]) ? IDLE : DONE;
+                    state[NXT] = (stop_bits[CRT]) ? TX_IDLE : TX_DONE;
                     tx_done_o = (tx_data_stream_mode_i) ? (fifo_if.empty_o & stop_bits[CRT]) : stop_bits[CRT];
                     stop_bits[NXT] = 1'b1;
                   end
 
                   default: begin 
-                    state[NXT] = IDLE;
+                    state[NXT] = TX_IDLE;
                     tx_done_o = (tx_data_stream_mode_i) ? fifo_if.empty_o : 1'b1;
                   end
                 endcase
@@ -382,12 +357,12 @@ endproperty
 
 /* While sending the request, the tx line must be stable for 10ms */
 property tx_stable_chk;
-  @(posedge clk_i) ((fifo_if.empty_o) && (state[CRT] == CFG_REQ)) |-> (!tx_o[*COUNT_10MS]);
+  @(posedge clk_i) ((fifo_if.empty_o) && (state[CRT] == TX_CFG_REQ)) |-> (!tx_o[*COUNT_10MS]);
 endproperty
 
 /* Send two stop bits. Tx should be high for 2 clock cycles */
 property two_stop_bits_chk;
-  @(posedge clk_i) ((state[CRT] == DONE) && (stop_bits_number_i == SB_2BIT)) |=> (tx_o[*2]); 
+  @(posedge clk_i) ((state[CRT] == TX_DONE) && (stop_bits_number_i == SB_2BIT)) |=> (tx_o[*2]); 
 endproperty
 
 /* The FIFO must not be written if it's full */
@@ -397,7 +372,7 @@ endproperty
 
 /* Read FIFO only in start state */
 property read_chk;
-  @(posedge clk_i) (state[CRT] != START) |-> !fifo_if.read_i;
+  @(posedge clk_i) (state[CRT] != TX_START) |-> !fifo_if.read_i;
 endproperty
 
   initial begin 

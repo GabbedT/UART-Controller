@@ -28,9 +28,14 @@
 // RELEASE HISTORY
 // VERSION : 1.0 
 // DESCRIPTION : Arbiter for interrupt, it defines which interrupt has to be handled 
-//               first, the interrupt cause signal must be high for only 1 clock cycle.   
+//               first, the interrupt cause signal must be high for only 1 clock cycle. 
+//               After receiving the interrupt cause, the arbiter needs 2 clock cycles 
+//               to signal it trough the IRQ pin. When the interrupt get cleared, 
+//               the arbiter needs to wait another 2 clock cycles before signaling 
+//               another possible interrupt.  
 // ------------------------------------------------------------------------------------
-// KEYWORDS : PARAMETERS, RX FIFO, DATAPATH, FSM LOGIC, ASSERTIONS
+// KEYWORDS : ENABLE INTERRUPT, PRIORITY 1 FIFO, PRIORITY 2 FIFO, PRIORITY 3 FIFO,
+//            PRIORITY SELECTOR, INTERRUPT REQUEST, FSM LOGIC
 // ------------------------------------------------------------------------------------
 
 import UART_pkg::*;
@@ -143,7 +148,7 @@ module interrupt_arbiter (
 
   logic prio2_fifo_write;
 
-  assign prio2_fifo_write = rx_fifo_full_i | config_req_slv_i;
+  assign prio2_fifo_write = rx_fifo_full_i | rx_rdy;
 
   /* FIFO interface assignment */
   sync_fifo_interface #(2) fifo_prio2_if(clk_i);
@@ -188,7 +193,7 @@ module interrupt_arbiter (
 
   logic prio3_fifo_write;
 
-  assign prio3_fifo_write = tx_done_i | rx_rdy;
+  assign prio3_fifo_write = tx_done_i | config_req_slv_i;
 
   sync_fifo_interface #(2) fifo_prio3_if(clk_i);
 
@@ -288,6 +293,20 @@ module interrupt_arbiter (
 
   logic [2:0] interrupt_vector;
 
+  /* Enable writing vector into ISR register */
+  logic enable_int_vec[NXT:CRT];
+
+      always_ff @(posedge clk_i) begin 
+        if (!rst_n_i) begin 
+          enable_int_vec[CRT] <= 1'b0;
+        end else begin 
+          enable_int_vec[CRT] <= enable_int_vec[NXT];
+        end
+      end
+
+  assign enable_int_vec_o = enable_int_vec[CRT];
+
+
       always_comb begin : fsm_next_state_logic
         irq_n[NXT] = irq_n[CRT];
         state[NXT] = state[CRT];
@@ -298,7 +317,7 @@ module interrupt_arbiter (
         fifo_prio2_if.read_i = 1'b0;
         fifo_prio3_if.read_i = 1'b0;
         interrupt_vector = 3'b0;
-        enable_int_vec_o = 1'b0;
+        enable_int_vec[NXT] = 1'b0;
 
         case (state[CRT])
 
@@ -311,6 +330,7 @@ module interrupt_arbiter (
 
             if (priority_select != 0) begin 
               irq_n[NXT] = 1'b0;
+              enable_int_vec[NXT] = 1'b1;
 
               /* Select the highest priority */
               casez (priority_select)
@@ -338,7 +358,6 @@ module interrupt_arbiter (
            */
           PRIO1_WAIT_ACKN: begin 
             interrupt_vector = prio1_int_vector;
-            enable_int_vec_o = 1'b1;
 
             case (interrupt_vector)
               INT_CONFIG_FAIL: begin 

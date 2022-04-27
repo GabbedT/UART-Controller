@@ -41,6 +41,7 @@
 // ------------------------------------------------------------------------------------
 
 import UART_pkg::*;
+import fsm_pkg::*;
 
 module receiver (
   input  logic         clk_i,
@@ -74,16 +75,6 @@ module receiver (
   /* How many clock cycles does it need to reach 10 ms */ 
   /* based on a specific system clock */
   localparam COUNT_10MS = SYSTEM_CLOCK_FREQ / 100;
-
-  /* Next and current state */
-  localparam NXT = 1;
-  localparam CRT = 0;
-
-  /* TX line in idle state */
-  localparam RX_IDLE = 1;
-
-  /* TX line start */
-  localparam RX_START = 0;
 
   /* Index in fifo data */
   localparam FRAME = 9;
@@ -167,7 +158,7 @@ module receiver (
       end : ms10_counter
 
       always_comb begin : ms10_counter_logic
-        if (rx_i != RX_IDLE) begin 
+        if (rx_i != RX_LINE_IDLE) begin 
           counter_10ms[NXT] = counter_10ms[CRT] + 1'b1;
         end else if (counter_10ms[CRT] == COUNT_10MS) begin 
           counter_10ms[NXT] = 'b0;
@@ -245,28 +236,12 @@ module receiver (
 //  FSM LOGIC  //
 //-------------//
 
-  typedef enum logic [2:0] {
-    /* The device is waiting for data */
-    IDLE,
-    /* The device is receiving a configuration request */
-    CONFIG_REQ,
-    /* Sample start bit */
-    START,
-    /* Sample the data bits*/
-    SAMPLE,
-    /* Sample parity bit */
-    PARITY,
-    /* Sample stop bits to end the transaction */
-    DONE
-  } receiver_fsm_e;
-
-
   /* FSM current and next state */
-  receiver_fsm_e state[NXT:CRT];
+  fsm_pkg::receiver_fsm_e state[NXT:CRT];
 
       always_ff @(posedge clk_i) begin : fsm_state_register
         if (!rst_n_i) begin 
-          state[CRT] <= IDLE;
+          state[CRT] <= RX_IDLE;
         end else begin 
           state[CRT] <= state[NXT];
         end
@@ -296,7 +271,7 @@ module receiver (
 
         if (counter_10ms[CRT] == COUNT_10MS) begin 
           cfg_req[NXT] = 1'b1;
-          state[NXT] = IDLE;
+          state[NXT] = RX_IDLE;
           
           /* Reset fifo only if the request is acknowledged */
           fifo_rst_n = !req_ackn_i;
@@ -307,13 +282,13 @@ module receiver (
           /* 
            *  The device is waiting for data to arrives.
            */
-          IDLE: begin 
+          RX_IDLE: begin 
             stop_bits_cnt[NXT] = 1'b0;
             stop_bits[NXT] = 1'b0;
 
-            if ((rx_i != RX_IDLE) & enable) begin 
+            if ((rx_i != RX_LINE_IDLE) & enable) begin 
               counter_16br[NXT] = 4'b0;
-              state[NXT] = (syn_data_cnt[CRT] == SYN_NUMBER) ? CONFIG_REQ : START;
+              state[NXT] = (syn_data_cnt[CRT] == SYN_NUMBER) ? RX_CONFIG_REQ : RX_START;
             end
           end
 
@@ -321,19 +296,19 @@ module receiver (
            *  The device is receiving a configuration request. This state 
            *  is reached after receiving 3 SYN character. 
            */
-          CONFIG_REQ: begin 
+          RX_CONFIG_REQ: begin 
             syn_data_cnt[NXT] = 'b0;
 
             /* Could be a false request, recover from it */
-            if (rx_i == RX_IDLE) begin 
-              state[NXT] = IDLE;
+            if (rx_i == RX_LINE_IDLE) begin 
+              state[NXT] = RX_IDLE;
             end
 
             /* Go in IDLE then wait the request. The master won't initiate
              * other transaction until the request is acknowledged */
             if (counter_10ms[CRT] == COUNT_10MS) begin 
               cfg_req[NXT] = 1'b1;
-              state[NXT] = IDLE;
+              state[NXT] = RX_IDLE;
             end
           end
 
@@ -341,13 +316,13 @@ module receiver (
            *  Sample the start bit in T/2 time (T is the bit while the
            *  bit is stable) to grant maximum signal stability.
            */
-          START: begin 
+          RX_START: begin 
             if (ov_baud_rt_i) begin 
               /* Reach the middle of the bit */
               if (counter_16br[CRT] == 4'd7) begin 
                 bits_processed[NXT] = 3'b0;
                 counter_16br[NXT] = 4'b0;
-                state[NXT] = SAMPLE;
+                state[NXT] = RX_SAMPLE;
               end else begin 
                 counter_16br[NXT] = counter_16br[CRT] + 1'b1;
               end
@@ -360,7 +335,7 @@ module receiver (
            *  counter reach T, it is in the middle of the start bit. The LSB
            *  is received first.
            */
-          SAMPLE: begin 
+          RX_SAMPLE: begin 
             /* Reset stop bits */
             stop_bits[NXT] = 1'b1;
 
@@ -376,17 +351,17 @@ module receiver (
 
                 if (parity_mode_i[1]) begin
                   case (data_width_i) 
-                    DW_5BIT: state[NXT] = (bits_processed[CRT] == 4'd4) ? DONE : SAMPLE;
-                    DW_6BIT: state[NXT] = (bits_processed[CRT] == 4'd5) ? DONE : SAMPLE;
-                    DW_7BIT: state[NXT] = (bits_processed[CRT] == 4'd6) ? DONE : SAMPLE;
-                    DW_8BIT: state[NXT] = (bits_processed[CRT] == 4'd7) ? DONE : SAMPLE;
+                    DW_5BIT: state[NXT] = (bits_processed[CRT] == 4'd4) ? RX_DONE : RX_SAMPLE;
+                    DW_6BIT: state[NXT] = (bits_processed[CRT] == 4'd5) ? RX_DONE : RX_SAMPLE;
+                    DW_7BIT: state[NXT] = (bits_processed[CRT] == 4'd6) ? RX_DONE : RX_SAMPLE;
+                    DW_8BIT: state[NXT] = (bits_processed[CRT] == 4'd7) ? RX_DONE : RX_SAMPLE;
                   endcase
                 end else begin 
                   case (data_width_i) 
-                    DW_5BIT: state[NXT] = (bits_processed[CRT] == 4'd4) ? PARITY : SAMPLE;
-                    DW_6BIT: state[NXT] = (bits_processed[CRT] == 4'd5) ? PARITY : SAMPLE;
-                    DW_7BIT: state[NXT] = (bits_processed[CRT] == 4'd6) ? PARITY : SAMPLE;
-                    DW_8BIT: state[NXT] = (bits_processed[CRT] == 4'd7) ? PARITY : SAMPLE;
+                    DW_5BIT: state[NXT] = (bits_processed[CRT] == 4'd4) ? RX_PARITY : RX_SAMPLE;
+                    DW_6BIT: state[NXT] = (bits_processed[CRT] == 4'd5) ? RX_PARITY : RX_SAMPLE;
+                    DW_7BIT: state[NXT] = (bits_processed[CRT] == 4'd6) ? RX_PARITY : RX_SAMPLE;
+                    DW_8BIT: state[NXT] = (bits_processed[CRT] == 4'd7) ? RX_PARITY : RX_SAMPLE;
                   endcase
                 end
               end else begin 
@@ -398,12 +373,12 @@ module receiver (
           /* 
            *  Sample parity bit. 
            */
-          PARITY: begin 
+          RX_PARITY: begin 
             if (ov_baud_rt_i) begin 
               if (counter_16br[CRT] == 4'd15) begin 
                 counter_16br[NXT] = 4'b0;
                 parity_bit[NXT] = rx_i;
-                state[NXT] = DONE;
+                state[NXT] = RX_DONE;
               end else begin 
                 counter_16br[NXT] = counter_16br[CRT] + 1'b1;
               end
@@ -414,9 +389,9 @@ module receiver (
            *  During DONE state, the stop bits are detected. During 
            *  this time the RX line must be stable on IDLE.
            */
-          DONE: begin  
+          RX_DONE: begin  
             /* Raise an interrupt */
-            if (state[NXT] == IDLE) begin
+            if (state[NXT] == RX_IDLE) begin
               if (rx_data_stream_mode_i) begin
                 if (threshold_i != 'b0) begin 
                   /* Interrupt if fifo size is greater or equal the threshold value */
@@ -441,7 +416,7 @@ module receiver (
                 case (stop_bits_number_i)
                   SB_2BIT: begin 
                     stop_bits_cnt[NXT] = 1'b1;
-                    state[NXT] = (stop_bits_cnt[CRT]) ? IDLE : DONE; 
+                    state[NXT] = (stop_bits_cnt[CRT]) ? RX_IDLE : RX_DONE; 
                     fifo_if.write_i = (stop_bits_cnt[CRT] & !fifo_if.full_o);
                     rx_done_o = stop_bits_cnt[CRT];
                   end
@@ -453,7 +428,7 @@ module receiver (
                       syn_data_cnt[NXT] = 'b0;
                     end
                     
-                    state[NXT] = IDLE; 
+                    state[NXT] = RX_IDLE; 
                     fifo_if.write_i = !fifo_if.full_o;
                     rx_done_o = 1'b1;
                   end
@@ -491,7 +466,7 @@ module receiver (
 
         /* Raise an overrun error if the fifo has reached the threshold level or
          * the data has been received and the device is receiving other data */
-        fifo_if.wr_data_i[OVERRUN] = rx_rdy_int[CRT] & (state[CRT] != IDLE);
+        fifo_if.wr_data_i[OVERRUN] = rx_rdy_int[CRT] & (state[CRT] != RX_IDLE);
       end : fifo_write_data_assignment
 
   /* Output assignment */
@@ -508,19 +483,18 @@ module receiver (
 //  FIFO FULL EDGE DETECTOR  //
 //---------------------------//
 
-  logic rx_full;
+  logic rx_full_posedge;
 
-      always_ff @(posedge clk_i) begin 
-        if (!rst_n_i) begin 
-          rx_full <= 1'b0;
-        end else begin 
-          rx_full <= fifo_if.full_o;
-        end
-      end
+  edge_detector #(1) posedge_detector (
+    .clk_i        ( clk_i           ),
+    .rst_n_i      ( rst_n_i         ),
+    .signal_i     ( fifo_if.full_o  ),
+    .edge_pulse_o ( rx_full_posedge )
+  );
 
   /* Detect the rising edge of fifo full signal. If the threshold is set to 0 and DSM is active, the signal 'rxd_rdy_o'
    * already signal the fifo being full. */
-  assign rx_fifo_full_o = (rx_data_stream_mode_i & (threshold_i == 6'b0)) ? 1'b0 : (fifo_if.full_o & (!rx_full));
+  assign rx_fifo_full_o = (rx_data_stream_mode_i & (threshold_i == 6'b0)) ? 1'b0 : rx_full_posedge;
 
 
 //--------------//
@@ -529,12 +503,12 @@ module receiver (
 
   /* Reset FSM state with an acknowledge */
   property req_ackn_state_chk;
-    @(posedge clk_i) ((counter_10ms[CRT] == COUNT_10MS) && req_ackn_i) |=> (state[CRT] == IDLE);
+    @(posedge clk_i) ((counter_10ms[CRT] == COUNT_10MS) && req_ackn_i) |=> (state[CRT] == RX_IDLE);
   endproperty
 
   /* While not in data stream mode, the interrupt must be asserted while receiving the stop bits */
   property interrupt_raise_chk;
-    @(posedge clk_i) (!rx_data_stream_mode_i && (state[CRT] == DONE)) |=> rxd_rdy_o;
+    @(posedge clk_i) (!rx_data_stream_mode_i && (state[CRT] == RX_DONE)) |=> rxd_rdy_o;
   endproperty
 
   /* The interrupt should be asserted till it's cleared with a read */
@@ -544,7 +518,7 @@ module receiver (
 
   /* Check frame error detection */
   property frame_error_chk;
-    @(posedge clk_i) (!rx_i && (state[CRT] == DONE)) |-> !fifo_if.wr_data_i[FRAME];
+    @(posedge clk_i) (!rx_i && (state[CRT] == RX_DONE)) |-> !fifo_if.wr_data_i[FRAME];
   endproperty
 
   /* Check threshold logic */

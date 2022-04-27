@@ -35,11 +35,13 @@
 //               It's resposable for error detection, data flow and settings
 //               autoconfiguration.
 // ------------------------------------------------------------------------------------
-// KEYWORDS : CONTROLLER LOGIC, next_state_logic, ERROR DETECTION LOGIC
+// KEYWORDS : PARAMETERS, DATAPATH, FSM LOGIC, ERROR DETECTION LOGIC, 
+//            COMMUNICATION MODE, ASSERTIONS
 // ------------------------------------------------------------------------------------
 
-
 import UART_pkg::*;
+import main_controller_pkg::*;
+import fsm_pkg::*;
 
 module main_controller ( 
   input  logic         rst_n_i,
@@ -52,10 +54,7 @@ module main_controller (
   input  logic         tx_done_i,
   input  logic         req_done_i,
   /* Error detection */
-  input  logic         frame_error_i,
-  input  logic         parity_i,
-  input  logic         overrun_error_i,   
-  input  logic         configuration_error_i,     
+  input  logic         parity_i,    
   /* FIFO status */ 
   input  logic         rx_fifo_empty_i,
   input  logic         tx_fifo_empty_i,
@@ -77,39 +76,28 @@ module main_controller (
   output logic         data_stream_mode_o,
   output logic         configuration_done_o,
   output logic         req_ackn_o,
-  output logic         tx_enable,
-  output logic         rx_enable,
+  output logic         tx_enable_o,
+  output logic         rx_enable_o,
   /* FIFO operations */
   output logic         rx_fifo_read_o,
   output logic         tx_fifo_write_o,
   /* Data */
   output logic [7:0]   data_tx_o,
   /* Error */
-  output uart_error_s  error_o
+  output logic         configuration_error_o,
+  output logic         parity_error_o
 );
-
-//--------------//
-//  PARAMETERS  //
-//--------------//
 
   /* How many clock cycles does it need to reach 50 ms */ 
   /* based on a specific system clock */
   localparam COUNT_50MS = SYSTEM_CLOCK_FREQ / 20;
 
-  localparam ACKN_PKT = 8'hFF; 
-
-  /* Next and current state */
-  localparam NXT = 1;
-  localparam CRT = 0;
-
-
 //------------//
 //  DATAPATH  //
 //------------//
-
+  /* Counter to 50ms */
   logic [$clog2(COUNT_50MS) - 1:0] counter_50ms[NXT:CRT];
 
-      /* Counter to 50ms */
       always_ff @(posedge clk_i) begin : ms50_counter
         if (!rst_n_i) begin   
           counter_50ms[CRT] <= 'b0;
@@ -123,17 +111,6 @@ module main_controller (
 
   /* Number of times the configuration failed */
   logic [1:0] config_failed[NXT:CRT];
-  
-      /* Count the number of times the device has tried to reques a configuration
-       * and the slave device didn't respond (max 3 times) */
-      always_ff @(posedge clk_i) begin : fail_config_register
-        if (!rst_n_i) begin 
-          config_failed[CRT] <= 'b0;
-        end else begin 
-          config_failed[CRT] <= config_failed[NXT];
-        end
-      end : fail_config_register
-      
 
   /* Tracks the state of the configuration */
   logic [1:0] config_packet_type[NXT:CRT];
@@ -143,62 +120,33 @@ module main_controller (
   localparam SB_TYPE = 2'b10;  /* Stop bits         */
   localparam EC_TYPE = 2'b11;  /* End configuration */
 
-      always_ff @(posedge clk_i) begin : next_cfg_packet_type
-        if (!rst_n_i) begin 
-          config_packet_type[CRT] <= 'b0;
-        end else begin 
-          config_packet_type[CRT] <= config_packet_type[NXT];
-        end
-      end : next_cfg_packet_type
-
-
   /* Count the number of SYN character sended */
-  logic [$clog2(SYN_NUMBER) - 1:0] syn_data_cnt[NXT:CRT];
-
-      always_ff @(posedge clk_i) begin : syn_counter
+  logic [$clog2(SYN_NUMBER) - 1:0] syn_data_cnt[NXT:CRT];  
+  
+      /* Count the number of times the device has tried to reques a configuration
+       * and the slave device didn't respond (max 3 times) */
+      always_ff @(posedge clk_i) begin : datapath_register
         if (!rst_n_i) begin 
+          config_failed[CRT] <= 'b0;
+          config_packet_type[CRT] <= 'b0;
           syn_data_cnt[CRT] <= 2'b0;
         end else begin 
+          config_failed[CRT] <= config_failed[NXT];
+          config_packet_type[CRT] <= config_packet_type[NXT];
           syn_data_cnt[CRT] <= syn_data_cnt[NXT];
         end
-      end : syn_counter
+      end : datapath_register
 
 
 //-------------//
 //  FSM LOGIC  //
 //-------------//
 
-  typedef enum logic [3:0] {
-    /* After reset signal, every register is resetted in standard configuration */
-    RESET,
-    /* Send configuration request */ 
-    CFG_REQ_MST,
-    /* If the device sees the initialization signal (10ms RX low) then send an acknowledgment packet */
-    SEND_ACKN_SLV,
-    /* Drive TX low to send the initialization signal */
-    SETUP_SLV,
-    /* Send data width packet */ 
-    SETUP_MST,
-    /* Wait transmitter to end the request or a configuration */
-    WAIT_TX_MST,
-    /* Wait transmitter to end sending acknowledgment packet */
-    WAIT_TX_SLV,
-    /* Wait request acknowledgment */
-    WAIT_REQ_ACKN_MST,
-    /* Wait for the acknowledgment data width packet */
-    WAIT_ACKN_MST,
-    /* Setup the device in standard configuration */
-    STD_CONFIG,
-    /* UART's main state */
-    MAIN
-  } main_control_fsm_e;
-
-
-  main_control_fsm_e state[NXT:CRT];
+  fsm_pkg::main_control_fsm_e state[NXT:CRT];
 
       always_ff @(posedge clk_i) begin : fsm_state_register
         if (!rst_n_i) begin 
-          state[CRT] <= RESET;
+          state[CRT] <= MAIN;
         end else begin 
           state[CRT] <= state[NXT];
         end
@@ -226,7 +174,7 @@ module main_controller (
         config_o = config_i;
         config_req_mst_o = 1'b0;
         data_stream_mode_o = data_stream_mode_i;
-        error_o.configuration = (interrupt_ackn_i) ? 1'b0 : configuration_error_i;
+        configuration_error_o = 1'b0;
         configuration_done_o = 1'b0;
         req_ackn_o = req_ackn_i;
 
@@ -238,14 +186,6 @@ module main_controller (
         data_tx_o = data_tx_i;
 
         case (state[CRT])
-
-          /*
-           *  Reset the device, set the configuration to the default configuration.
-           */
-          RESET: begin 
-            /* Don't perform any operation */
-            state[NXT] = MAIN;
-          end
 
           /*
            *  Setup the standard configuration.
@@ -318,7 +258,7 @@ module main_controller (
 
             if (config_failed[CRT] == 2'd3) begin 
               /* Raise a configuration error and set the standard configuration */
-              error_o.configuration = 1'b1;
+              configuration_error_o = 1'b1;
               config_failed[NXT] = 2'b0;
               state[NXT] = STD_CONFIG;
             end else if (counter_50ms[CRT] != COUNT_50MS) begin
@@ -338,7 +278,7 @@ module main_controller (
           end
 
           /*
-           *  The device will send a data width configuration packet to the slave device.
+           *  The device will send a configuration packet to the slave device.
            */
           SETUP_MST: begin 
             state[NXT] = WAIT_TX_MST;
@@ -381,7 +321,7 @@ module main_controller (
              * standard configuration */
             if (counter_50ms[CRT] == COUNT_50MS) begin 
               state[NXT] = STD_CONFIG;
-              error_o.configuration = 1'b1;
+              configuration_error_o = 1'b1;
             end else if (data_rx_i == ACKN_PKT) begin
               /* If the end configuration packet was sended go in main state */
               if (config_packet_type[CRT] == EC_TYPE) begin 
@@ -424,7 +364,7 @@ module main_controller (
               endcase
             end else begin 
               state[NXT] = STD_CONFIG;
-              error_o.configuration = 1'b1;
+              configuration_error_o = 1'b1;
             end
           end
 
@@ -461,9 +401,7 @@ module main_controller (
 //  ERROR DETECTION LOGIC  //
 //-------------------------//
 
-  assign error_o.overrun = overrun_error_i;
-
-  logic parity;
+  logic parity, parity_error;
 
       always_comb begin : parity_detection_logic
 
@@ -484,21 +422,27 @@ module main_controller (
 
         /* Select ODD or EVEN parity */
         case (config_i.parity_mode)
-          EVEN:    error_o.parity = parity_i != (parity ^ 1'b0);
-          ODD:     error_o.parity = parity_i != (parity ^ 1'b1);
-          default: error_o.parity = 1'b0;
+          EVEN:    parity_error = parity_i != (parity ^ 1'b0);
+          ODD:     parity_error = parity_i != (parity ^ 1'b1);
+          default: parity_error = 1'b0;
         endcase
       end : parity_detection_logic
 
-  assign error_o.frame = frame_error_i;
+  /* Detect parity error positive edge for interrupt arbiter */
+  edge_detector #(1) posedge_detector (
+    .clk_i        ( clk_i                ),
+    .rst_n_i      ( rst_n_i              ),
+    .signal_i     ( parity_error         ),
+    .edge_pulse_o ( parity_error_o       )
+  );
 
 
 //---------------------//
 //  COMMUNICATION MODE //
 //---------------------//
 
-  assign tx_enable = communication_mode_i[0];
-  assign rx_enable = communication_mode_i[1];
+  assign tx_enable_o = communication_mode_i[0];
+  assign rx_enable_o = communication_mode_i[1];
 
 
 //--------------//
@@ -549,9 +493,9 @@ property fifos_op_chk;
   rx_fifo_read_i != tx_fifo_write_i;
 endproperty
 
-/* Errors flow from input to output in main state */
-property error_chk;
-  @(posedge clk_i) (state[CRT] == MAIN) |-> (error_o.configuration == configuration_error_i) && (error_o.frame == frame_error_i) && (error_o.overrun == overrun_error_i); 
+/* Parity error should be high for only one clock cycle */
+property parity_error_chk;
+  @(posedge clk_i) parity_error |=> parity_error_o ##1 !parity_error_o;
 endproperty
 
   initial begin : assertions
@@ -576,8 +520,8 @@ endproperty
     assert property (fifos_op_chk)
     else $info("[Main controller] The device can't send and read data in the same clock cycle!");
 
-    assert property (error_chk)
-    else $info("[Main controller] Fail on error flow!");
+    assert property (parity_error_chk)
+    else $info("[Main controller] Fail on parity error!");
   end : assertions
 
 endmodule : main_controller
