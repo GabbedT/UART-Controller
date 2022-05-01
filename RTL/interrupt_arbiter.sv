@@ -48,7 +48,7 @@ module interrupt_arbiter (
   /* Interrupt cause */
   input  logic       rx_rdy_i,
   input  logic       tx_done_i,
-  input  logic       cfg_error_i,
+  input  logic       config_error_i,
   input  logic       parity_error_i,
   input  logic       frame_error_i,
   input  logic       overrun_error_i,
@@ -63,8 +63,8 @@ module interrupt_arbiter (
 
   /* Interrupt clear */
   input  logic       int_ackn_i,
-  input  logic       config_ackn_i,
-  input  logic       read_rx_data_i,
+  input  logic       config_ackn_i,  
+  input  logic       read_rx_data_i, 
   input  logic       rx_fifo_empty_i,
 
   output logic [2:0] interrupt_vector_o,
@@ -98,14 +98,14 @@ module interrupt_arbiter (
 
   logic prio1_fifo_write;
 
-  assign prio1_fifo_write = cfg_error_i | parity_error | frame_error | overrun_error;
+  assign prio1_fifo_write = config_error_i | parity_error | frame_error | overrun_error;
 
   /* FIFO interface assignment */
   sync_fifo_interface #(4) fifo_prio1_if(clk_i);
 
   assign fifo_prio1_if.write_i = prio1_fifo_write;
   assign fifo_prio1_if.rst_n_i = rst_n_i;
-  assign fifo_prio1_if.wr_data_i = {cfg_error_i, overrun_error, frame_error, parity_error};
+  assign fifo_prio1_if.wr_data_i = {config_error_i, overrun_error, frame_error, parity_error};
 
 
   /* FIFO buffer instantiation in FWFT mode */

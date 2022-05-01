@@ -62,19 +62,22 @@ module main_controller (
   input  logic         tx_fifo_write_i,
   /* Configuration */
   input  logic [1:0]   communication_mode_i,
-  input  logic         enable_cfg_receive_i,
+  input  logic         enable_config_receive_i,
   input  logic         config_req_slv_i,
   input  logic         config_req_mst_i,
-  input  logic         std_config_i,
+  input  logic         set_std_config_i,
   input  uart_config_s config_i,
-  input  logic         data_stream_mode_i,
+  input  logic         rx_data_stream_mode_i,
+  input  logic         tx_data_stream_mode_i,
   input  logic         req_ackn_i,
 
   output logic         STR_en_o,
   output uart_config_s config_o,
   output logic         config_req_mst_o,
-  output logic         data_stream_mode_o,
-  output logic         configuration_done_o,
+  output logic         rx_data_stream_mode_o,
+  output logic         tx_data_stream_mode_o,
+  output logic [1:0]   communication_mode_o,
+  output logic         config_done_o,
   output logic         req_ackn_o,
   output logic         tx_enable_o,
   output logic         rx_enable_o,
@@ -84,7 +87,7 @@ module main_controller (
   /* Data */
   output logic [7:0]   data_tx_o,
   /* Error */
-  output logic         configuration_error_o,
+  output logic         config_error_o,
   output logic         parity_error_o
 );
 
@@ -154,7 +157,7 @@ module main_controller (
 
   logic config_req_slv;
 
-  assign config_req_slv = config_req_slv_i & enable_cfg_receive_i;
+  assign config_req_slv = config_req_slv_i & enable_config_receive_i;
 
       always_comb begin : fsm_next_state_logic 
 
@@ -173,10 +176,11 @@ module main_controller (
         STR_en_o = 1'b0;
         config_o = config_i;
         config_req_mst_o = 1'b0;
-        data_stream_mode_o = data_stream_mode_i;
-        configuration_error_o = 1'b0;
-        configuration_done_o = 1'b0;
-        req_ackn_o = req_ackn_i;
+        rx_data_stream_mode_o = rx_data_stream_mode_i;
+        tx_data_stream_mode_o = tx_data_stream_mode_i;
+        communication_mode_o = communication_mode_i;
+        config_error_o = 1'b0;
+        config_done_o = 1'b0;
 
         /* FIFO signals */
         rx_fifo_read_o = 1'b0;
@@ -195,7 +199,9 @@ module main_controller (
             config_o.data_width = STD_DATA_WIDTH;
             config_o.parity_mode = STD_PARITY_MODE;
             config_o.stop_bits = STD_STOP_BITS;
-            data_stream_mode_o = 1'b0;
+            rx_data_stream_mode_o = 1'b0;
+            tx_data_stream_mode_o = 1'b0;
+            communication_mode_o = STD_COMM_MODE;
 
             state[NXT] = MAIN;
           end
@@ -207,7 +213,7 @@ module main_controller (
            */ 
           MAIN: begin 
             config_packet_type[NXT] = 'b0;
-            configuration_done_o = 1'b1;
+            config_done_o = 1'b1;
 
             rx_fifo_read_o = rx_fifo_read_i;
             tx_fifo_write_o = tx_fifo_write_i;
@@ -218,7 +224,7 @@ module main_controller (
             end else if (config_req_mst_i) begin 
               /* If the current device request a configuration setup (current device = MASTER) */
               state[NXT] = CFG_REQ_MST;
-            end else if (std_config_i) begin 
+            end else if (set_std_config_i) begin 
               state[NXT] = STD_CONFIG; 
             end 
           end
@@ -258,7 +264,7 @@ module main_controller (
 
             if (config_failed[CRT] == 2'd3) begin 
               /* Raise a configuration error and set the standard configuration */
-              configuration_error_o = 1'b1;
+              config_error_o = 1'b1;
               config_failed[NXT] = 2'b0;
               state[NXT] = STD_CONFIG;
             end else if (counter_50ms[CRT] != COUNT_50MS) begin
@@ -312,7 +318,7 @@ module main_controller (
            */
           WAIT_ACKN_MST: begin
             counter_50ms[NXT] = counter_50ms[CRT] + 1'b1;
-            data_stream_mode_o = 1'b1;
+            rx_data_stream_mode_o = 1'b1;
 
             /* When data arrives, read the fifo */
             rx_fifo_read_o = !rx_fifo_empty_i;
@@ -321,7 +327,7 @@ module main_controller (
              * standard configuration */
             if (counter_50ms[CRT] == COUNT_50MS) begin 
               state[NXT] = STD_CONFIG;
-              configuration_error_o = 1'b1;
+              config_error_o = 1'b1;
             end else if (data_rx_i == ACKN_PKT) begin
               /* If the end configuration packet was sended go in main state */
               if (config_packet_type[CRT] == EC_TYPE) begin 
@@ -343,7 +349,7 @@ module main_controller (
            *  receive a packet.
            */
           SETUP_SLV: begin 
-            data_stream_mode_o = 1'b1;
+            rx_data_stream_mode_o = 1'b1;
 
             rx_fifo_read_o = !rx_fifo_empty_i;
 
@@ -364,7 +370,7 @@ module main_controller (
               endcase
             end else begin 
               state[NXT] = STD_CONFIG;
-              configuration_error_o = 1'b1;
+              config_error_o = 1'b1;
             end
           end
 
@@ -373,7 +379,6 @@ module main_controller (
            */
           SEND_ACKN_SLV: begin           
             /* Send ackowledge packet */
-            req_ackn_o = 1'b0;
             tx_fifo_write_o = 1'b1;
             data_tx_o = ACKN_PKT;
             state[NXT] = WAIT_TX_SLV;
@@ -451,7 +456,7 @@ module main_controller (
 
 /* Check that no operation is done during reset */
 sequence no_operation;
-  !(tx_fifo_write_o & rx_fifo_read_o & STR_en_o & configuration_done_o & config_req_mst_o);
+  !(tx_fifo_write_o & rx_fifo_read_o & STR_en_o & config_done_o & config_req_mst_o);
 endsequence : no_operation
 
 /* Check the sequence, since the reset is syncronous the FSM needs 1 clock cycle to reach the desired state */

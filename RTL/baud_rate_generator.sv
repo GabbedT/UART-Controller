@@ -47,15 +47,10 @@
 // DVSR_WIDTH :   /   : Divisor number of bits : 32
 // ------------------------------------------------------------------------------------
 
-module baud_rate_generator #(
-
-  /* Divisor's number of bits used to calculate the baud rate */
-  parameter DVSR_WIDTH = 16
-) 
-(
+module baud_rate_generator (
   input  logic                    clk_i,
   input  logic                    rst_n_i,
-  input  logic [DVSR_WIDTH - 1:0] divisor_i,
+  input  logic [15:0] divisor_i,
 
   output logic                    ov_baud_rt_o 
 );
@@ -65,7 +60,7 @@ module baud_rate_generator #(
 //----------//
 
   /* Counter for oversampling */
-  logic [DVSR_WIDTH - 1:0] counter_ov;
+  logic [15:0] counter_ov;
 
       /* Counter that ticks 16 times the baudrate */
       always_ff @(posedge clk_i) begin : counter_16_br
