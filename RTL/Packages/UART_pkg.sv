@@ -85,16 +85,10 @@ package UART_pkg;
 
   localparam logic [1:0] END_CONFIGURATION_ID = 2'b00;
 
-//----------------------//
-//  GENERAL PARAMETERS  //
-//----------------------//
 
-  /* System clock frequency in Hz */
-  localparam SYSTEM_CLOCK_FREQ = 100_000_000;
-
-  /* Number of words stored in the buffers */
-  localparam TX_FIFO_DEPTH = 64;
-  localparam RX_FIFO_DEPTH = 64;
+//-----------------//
+//  INTERRUPT IDS  //
+//-----------------//
 
   /* Interrupt id */
   localparam INT_TX_DONE     = 3'b000;
@@ -106,11 +100,30 @@ package UART_pkg;
   localparam INT_RX_FULL     = 3'b110;
   localparam INT_CONFIG_REQ  = 3'b111;
 
+
+//----------------------//
+//  COMMUNICATION MODE  //
+//----------------------//
+
   /* Communication mode */
   localparam DISABLED    = 2'b00;
   localparam SIMPLEX_TX  = 2'b01;
   localparam SIMPLEX_RX  = 2'b10;
   localparam FULL_DUPLEX = 2'b11;
+
+  localparam STD_COMM_MODE = FULL_DUPLEX;
+
+
+//----------------------//
+//  GENERAL PARAMETERS  //
+//----------------------//
+
+  /* System clock frequency in Hz */
+  localparam SYSTEM_CLOCK_FREQ = 100_000_000;
+
+  /* Number of words stored in the buffers */
+  localparam TX_FIFO_DEPTH = 64;
+  localparam RX_FIFO_DEPTH = 64;
 
   /* Number of SYN character received to detect the 
    * start of the configuration request */
@@ -121,7 +134,12 @@ package UART_pkg;
   localparam STD_STOP_BITS   = SB_1BIT;
   localparam STD_PARITY_MODE = EVEN;
 
-  localparam STD_CONFIGURATION = {STD_DATA_WIDTH, STD_PARITY_MODE, STD_STOP_BITS};
+  localparam STD_CONFIGURATION = {STD_STOP_BITS, STD_PARITY_MODE, STD_DATA_WIDTH};
+
+  /* Standard baud rate */
+  localparam STD_BAUD_RATE = 9600;
+
+  localparam STD_DIVISOR = int'((SYSTEM_CLOCK_FREQ / (16 * STD_BAUD_RATE)) - 1);
 
 endpackage : UART_pkg
 
