@@ -38,23 +38,24 @@ module edge_detector #(
   parameter EDGE = 1
 ) (
   input  logic clk_i,
-  input  logic rst_n_i,
   input  logic signal_i,
 
   output logic edge_pulse_o
 );
 
   /* Memorize the signal value of the previous clock cycle */
-  logic signal_ff;
+  logic signal_dly;
 
-      always_ff @(posedge clk_i) begin 
-        if (!rst_n_i) begin 
-          signal_ff <= 1'b0;
-        end else begin 
-          signal_ff <= signal_i;
-        end
-      end
+      always_ff @(posedge clk_i) begin : delay 
+        signal_dly <= signal_i;
+      end : delay
   
-  assign edge_pulse_o = signal_i & (!signal_ff);
+  if (EDGE) begin
+    /* Detect positive edge */
+    assign edge_pulse_o = signal_i & (!signal_dly);
+  end else begin 
+    /* Detect negative edge */
+    assign edge_pulse_o = (!signal_i) & signal_dly;
+  end
 
 endmodule : edge_detector

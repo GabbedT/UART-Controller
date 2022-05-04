@@ -58,17 +58,6 @@ module configuration_registers (
   output logic        tx_fifo_write_o
 ); 
 
-
-  /* Registers addresses */
-  localparam STR_ADDR  = 0;
-  localparam LDVR_ADDR = 1;
-  localparam UDVR_ADDR = 2;
-  localparam FSR_ADDR  = 3;
-  localparam CTR_ADDR  = 4;
-  localparam ISR_ADDR  = 5;
-  localparam RXR_ADDR  = 6;
-  localparam TXR_ADDR  = 7;
-
   /* Enable writing into registers */
   reg_enable_t enable;
 
@@ -99,6 +88,12 @@ module configuration_registers (
   assign data_width_o = STR_data.DWID;
   assign parity_mode_o = STR_data.PMID;
   assign stop_bits_o = STR_data.SBID;
+
+
+  logic change_config;
+  assign change_config = ((STR_data.DWID != data_io[1:0]) | (STR_data.PMID != data_io[3:2]) | (STR_data.SBID != data_io[5:4]));
+
+  assign send_config_req_o = change_config & (address_i == STR_ADDR) & write_i;
 
 
 //----------------//
@@ -165,13 +160,11 @@ module configuration_registers (
           CTR_data.ENREQ <= 1'b1;
           CTR_data.AKREQ <= 1'b0;
           CTR_data.STDC  <= 1'b0;
-          CTR_data.SREQ  <= 1'b0;
         end else if (enable.CTR) begin 
-          CTR_data.COM   <= data_io[6:5];
-          CTR_data.ENREQ <= data_io[4];
-          CTR_data.AKREQ <= data_io[2];
-          CTR_data.STDC  <= data_io[1];
-          CTR_data.SREQ  <= data_io[0];
+          CTR_data.COM   <= data_io[5:4];
+          CTR_data.ENREQ <= data_io[3];
+          CTR_data.AKREQ <= data_io[1];
+          CTR_data.STDC  <= data_io[0];
         end 
       end : CTR_WR
 
@@ -193,17 +186,12 @@ module configuration_registers (
         if (CTR_data.STDC) begin 
           set_std_config = 1'b0;
         end
-
-        if (CTR_data.SREQ) begin 
-          send_config_req = 1'b0;
-        end
       end
 
   assign communication_mode_o = CTR_data.COM;
   assign enable_config_o = enable_config_req;
   assign ack_request_o = CTR_data.AKREQ;
   assign set_std_config_o = CTR_data.STDC;
-  assign send_config_req_o = CTR_data.SREQ;
 
 
 //----------------//

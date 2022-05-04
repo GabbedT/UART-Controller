@@ -487,7 +487,6 @@ module receiver (
 
   edge_detector #(1) posedge_detector (
     .clk_i        ( clk_i           ),
-    .rst_n_i      ( rst_n_i         ),
     .signal_i     ( fifo_if.full_o  ),
     .edge_pulse_o ( rx_full_posedge )
   );

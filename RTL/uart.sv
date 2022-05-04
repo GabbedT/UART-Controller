@@ -22,14 +22,12 @@ module uart (
 
   edge_detector #(1) posedge_read (
     .clk_i        ( clk_i   ),
-    .rst_n_i      ( rst_n_i ),
     .signal_i     ( read_i  ),
     .edge_pulse_o ( read    )
   );
 
-    edge_detector #(1) posedge_write (
+  edge_detector #(1) posedge_write (
     .clk_i        ( clk_i   ),
-    .rst_n_i      ( rst_n_i ),
     .signal_i     ( write_i ),
     .edge_pulse_o ( write   )
   );

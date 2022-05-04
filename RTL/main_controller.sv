@@ -436,7 +436,6 @@ module main_controller (
   /* Detect parity error positive edge for interrupt arbiter */
   edge_detector #(1) posedge_detector (
     .clk_i        ( clk_i                ),
-    .rst_n_i      ( rst_n_i              ),
     .signal_i     ( parity_error         ),
     .edge_pulse_o ( parity_error_o       )
   );
