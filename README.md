@@ -7,6 +7,9 @@
     - [Top Level View](#top-level-view)
   - [Signal Description](#signal-description)
   - [Configuration Protocol](#configuration-protocol)
+    - [Data width packet](#data-width-packet)
+    - [Parity mode packet](#parity-mode-packet)
+    - [Stop bits number packet](#stop-bits-number-packet)
   - [Main Controller](#main-controller)
   - [Receiver](#receiver)
   - [Transmitter](#transmitter)
@@ -67,22 +70,101 @@
   
   ## Configuration Protocol
 
+  This UART controller implements a **configuration protocol** that enables two devices to change their configuration. An UART is a communication protocols that doesn't support **master/slave** configuration: two UARTs that share data have the same priority. In this UART architecture there is a master/slave configuration but only during the configuration process. The process is started once one of the two UARTs change their configuration state, at that point the device which changed his configuration first become the **master** and will dictate the data sent to the slave. The **slave** job is only acknowledging the packed of data received and to convert those packets into a valid device configuration.
+
+  The process start with the sending of a **configuration request** which is done by setting the **TX line to logic 0 for 10ms**. Once this is done, the master will **wait** for the slave to send an acknowledgment packet (0xFF), the **wait lasts for 50ms**, if the slave doesn't respond in time, the master will send another request. This is done three times, if the other device doesn't respond for three times, a configuration error is generated.
+
+  If instead the slave acknowledge the request, the master will start sending configuration packets (keep in mind that the two UARTs **must** have the same starting configuration!).
+
+  ![Configuration Packet](Images/ConfigurationPacket.PNG)
+
+  The valid bits are only 4 which enable sending the packet with every data width configuration supported. The **ID** defines the packet type (data width, stop bits number, parity mode), while the **OPTION** field defines the configuration.
+
+  | ID | DESCRIPTION |
+  | -- | ----------- |
+  | 00 | End configuration packet
+  | 01 | Data width packet
+  | 10 | Parity mode packet
+  | 11 | Stop bits number packet
+
+  ### Data width packet
+
+  | OPTION | DESCRIPTION | 
+  | ------ | ----------- | 
+  | 00     | 5 bits
+  | 01     | 6 bits
+  | 10     | 7 bits
+  | 11     | 8 bits
+
+  ### Parity mode packet
+
+  | OPTION | DESCRIPTION | 
+  | ------ | ----------- | 
+  | 00     | Even
+  | 01     | Odd
+  | 10     | Disabled
+  | 11     | Disabled
+
+  ### Stop bits number packet
+
+  | OPTION | DESCRIPTION | 
+  | ------ | ----------- | 
+  | 00     | 1 bit
+  | 01     | 2 bits
+  | 10     | Reserved (set 1 bit)
+  | 11     | Reserved (set 1 bit)
+
+  The **end configuration packet** has 00 in the **OPTION** field.
+
+  Once the master has finished sending a packet the slave must acknowledge it, this **handshake** procedure runs until every packet has been sent.
+
+
   ## Main Controller
+
+  The main controller is the module that enables the configuration process between two devices. It's a big FSM, at the reset it's setted in the `MAIN` state, the configuration is the standard one which is defined in the `UART_pkg.sv` file.
+  
+  If the CPU writes into the `STR` register and at least one of the three configuration fields (data width, stop bits number and parity mode) is changed, the controller waits for the RX and TX buffers to be empty, then sends a configuration request becoming the **master** (TX low for 10ms). Once the request is acknowledged, the controller sends a series of configuration packets to the **slave device**, the slave must acknowledge every packet received. The process ends by sending of an `END CONFIGURATION` packet with the subsequent acknowledge.
+
+  If the device instead of sending the request, receives one, the controller sends an acknowledgment packet only if the request is acknowledged by the **user** by setting the `AKREQ` bit in the `CTR` register. At this point the device became the **slave**, for every configuration packet received, it sends an acknowledgment. The process ends with the reception of an `END CONFIGURATION` packet and the acknowledgment.
+
+  If some errors happens during the configuration process (an illegal packet is received or the request isn't simply acknowledged), the controller will simply set the **standard configuration**.
+
+  The main controller also is responsable for **parity error checking**, **communication mode** and **data stream mode** setup.  
+
+
 
   ## Receiver
 
+  The receiver module is responsable of managing the right reception timing based on the device configuration. 
+
+  It contains a 64 bytes FIFO buffer which can be used with the **RX data stream mode** (DSM). Instead of interrupting every time the UART receives a packet of data (if DSM is disabled), the device will interrupt once the buffer is **full** or the number of packets received match the **threshold** value which is stored into the `RX THRESHOLD` field of the **FSR** register.
+
+  The receiver also checks the data integrity and generate proper error signals which are stored in a 64 x 3 bit FIFO buffer which is read/written with the data buffer. Once the packet is received the module assert the `rx_done` signal and also `rxd_rdy` signal if the interrupt conditions are satisfied.
+
+
   ## Transmitter
+
+  The transmitter module is responsable of managing the right transmission timing based on the device configuration. 
+  
+  It contains a 64 bytes FIFO buffer which can be used with the **TX data stream mode** (DSM) to send a burst of data: the CPU will write the `TXR` register multiple times, then wait for the transmitter to end its task. If the DSM is enabled the transmitter will assert the `tx_done` signal once the buffer is empty, otherwise it will be asserted for every packet sent.  
+
+  If the device wants to send a configuration request, the transmitter will deassert the TX line for 10ms, then it will enter in the main state ready to send configuration packets. 
+
 
   ## Interrupt
   
-  Any interrupt is managed by the **interrupt arbiter**. Since there are three different priority level, the arbiter must ensure that all the high priority interrupt are cleared before the low priority one, no matter the temporal order in which they are generated. 
+  Any interrupt is managed by the **interrupt arbiter**. Since there are three different priority level, the arbiter must ensure that all the high priority interrupt are cleared before the low priority one, no matter the temporal order in which they are generated (even if it is highly unlikely that something like that happens given the CPU clock speed versus the UART one). 
   
-  All the interrupts are generated by other modules (receiver, transmitter and main controller) and the signals must stay high for one clock cycle. After that, the signal are cleared even if the interrupt cause is still there (for example when the receiver FIFO is full, the full signal is high until the buffer isn't full anymore, but in the arbiter the signal arrives in a form of a *pulse*).
-
+  All the interrupts are generated by other modules (receiver, transmitter and main controller) and the signals that cause the interrupt must stay high for one clock cycle. 
 
   After the pulse is generated, the cause of the interrupt is saved in a FIFO buffer, there are three buffers in the arbiter, each one with a specific priority. Obviously the cause of the interrupt is memorized in the corresponding priority FIFO.
 
-  **Two clock cycle after** the generation of the interrupt, the pin IRQ is set to low to signal that an interrupt has been generated.
+  **Two clock cycle after** the generation of the interrupt, the pin <ins>IRQ</ins> is set to low to signal that an interrupt has been generated.
+
+  To clear the interrupt the CPU must first recognize that the UART has interrupted. If the CPU can manage interrupts then follows its routine, else the CPU must **poll** the `IPEND` bit in the **CTR** register: if an interrupt is pending, the bit will be set.
+  
+  After acknowledging the interrupt, the CPU must read the `INTID` field in the **ISR** register (read [Interrupt Status Register](#interrupt-status-register-isr)) to know what's the cause of it, then execute the corresponding operation to definitely clear the interrupt.
+
 
 
 # Registers
@@ -179,12 +261,12 @@
 
   | Field  | Access Mode | Description |
   | ------ | ----------- | ----------- |
+  | IPEND  | `(R)`       | An interrupt is pending
   | COM    | `(R/W)`     | Communication mode. 
   | ENREQ  | `(R/W)`     | Enable the configuration process. 
   | CDONE  | `(R)`       | The configuration process has ended, this bit **must be polled** during every configuration process (both master and slave).
   | AKREQ  | `(W)`       | Acknowledge the configuration request sended by the master device, the device become slave.
   | STDC   | `(W)`       | Set standard configuration.
-  | SREQ   | `(W)`       | Send configuration request, the device in this case become master.
 
   **COM Field**
 
