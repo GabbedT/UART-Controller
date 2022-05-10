@@ -4,7 +4,7 @@
   - [Features](#features)
 - [Architecture](#architecture)
   - [Block Diagram](#block-diagram)
-    - [Top Level View](#top-level-view)
+  - [Top Level View](#top-level-view)
   - [Signal Description](#signal-description)
   - [Configuration Protocol](#configuration-protocol)
     - [Data width packet](#data-width-packet)
@@ -48,7 +48,9 @@
 
   ## Block Diagram
 
-  ### Top Level View
+  ![BLOCKDIAGRAM](Images/BlockDiagram.png)
+
+  ## Top Level View
 
   ![PACKAGE](Images/Package.png)
 
@@ -70,9 +72,11 @@
   
   ## Configuration Protocol
 
-  This UART controller implements a **configuration protocol** that enables two devices to change their configuration. An UART is a communication protocols that doesn't support **master/slave** configuration: two UARTs that share data have the same priority. In this UART architecture there is a master/slave configuration but only during the configuration process. The process is started once one of the two UARTs change their configuration state, at that point the device which changed his configuration first become the **master** and will dictate the data sent to the slave. The **slave** job is only acknowledging the packed of data received and to convert those packets into a valid device configuration.
+  This UART controller implements a **configuration protocol** that enables two devices to change their configuration. An UART is a communication protocols that doesn't support **master/slave** configuration: two UARTs that share data have the same priority. In this UART architecture there is a master/slave configuration but only during the configuration process. The process is started once one of the two UARTs change their configuration state (*the device won't change his state until the configuration has ended*), at that point the device which changed his configuration first become the **master** and will dictate the data sent to the slave. The **slave** job is only acknowledging the packed of data received and to convert those packets into a valid device configuration.
 
-  The process start with the sending of a **configuration request** which is done by setting the **TX line to logic 0 for 10ms**. Once this is done, the master will **wait** for the slave to send an acknowledgment packet (0xFF), the **wait lasts for 50ms**, if the slave doesn't respond in time, the master will send another request. This is done three times, if the other device doesn't respond for three times, a configuration error is generated.
+  The process start with the sending of three `SYN` (0x16) data packet to advertize the slave device that a configuration request is being sent, if those packets are not received the configuration process cannot start, this enable the use of slower baudrate without starting configuration processes while sending data bits. 
+  
+  The configuration request is then sent by lowering the TX line (logic 0) for 1ms Once this is done, the master will **wait** for the slave to send an acknowledgment packet (0xFF), the **wait lasts for 10ms**, if the slave doesn't respond in time, the master will send another request. This is done three times, if the other device doesn't respond for three times, a configuration error is generated.
 
   If instead the slave acknowledge the request, the master will start sending configuration packets (keep in mind that the two UARTs **must** have the same starting configuration!).
 
@@ -123,7 +127,7 @@
 
   The main controller is the module that enables the configuration process between two devices. It's a big FSM, at the reset it's setted in the `MAIN` state, the configuration is the standard one which is defined in the `UART_pkg.sv` file.
   
-  If the CPU writes into the `STR` register and at least one of the three configuration fields (data width, stop bits number and parity mode) is changed, the controller waits for the RX and TX buffers to be empty, then sends a configuration request becoming the **master** (TX low for 10ms). Once the request is acknowledged, the controller sends a series of configuration packets to the **slave device**, the slave must acknowledge every packet received. The process ends by sending of an `END CONFIGURATION` packet with the subsequent acknowledge.
+  If the CPU writes into the `STR` register and at least one of the three configuration fields (data width, stop bits number and parity mode) is changed, the controller waits for the RX and TX buffers to be empty, then sends a configuration request becoming the **master** (TX low for 1ms). Once the request is acknowledged within 10ms, the controller sends a series of configuration packets to the **slave device**, the slave must acknowledge every packet received. The process ends by sending of an `END CONFIGURATION` packet with the subsequent acknowledge.
 
   If the device instead of sending the request, receives one, the controller sends an acknowledgment packet only if the request is acknowledged by the **user** by setting the `AKREQ` bit in the `CTR` register. At this point the device became the **slave**, for every configuration packet received, it sends an acknowledgment. The process ends with the reception of an `END CONFIGURATION` packet and the acknowledgment.
 
@@ -135,20 +139,22 @@
 
   ## Receiver
 
-  The receiver module is responsable of managing the right reception timing based on the device configuration. 
+  The receiver module is responsable for managing the right reception timing based on the device configuration and detecting a configuration request sent by the master device. 
 
   It contains a 64 bytes FIFO buffer which can be used with the **RX data stream mode** (DSM). Instead of interrupting every time the UART receives a packet of data (if DSM is disabled), the device will interrupt once the buffer is **full** or the number of packets received match the **threshold** value which is stored into the `RX THRESHOLD` field of the **FSR** register.
 
-  The receiver also checks the data integrity and generate proper error signals which are stored in a 64 x 3 bit FIFO buffer which is read/written with the data buffer. Once the packet is received the module assert the `rx_done` signal and also `rxd_rdy` signal if the interrupt conditions are satisfied.
+  The receiver also checks the data integrity after receiving the data and generate proper error signals which are stored in a 64 x 3 bit FIFO buffer which is read/written with the data buffer. Once the packet is received the module assert the `rx_done` signal and also `rxd_rdy` signal if the interrupt conditions are satisfied.
+
+  The detection of the configuration request is done initially by checking every data packet received, a counter will keep track of the `SYN` packets received. Once three consecutive are sent, the receiver goes into a state where it checks that the RX line is held low for 1ms. Once this happens, it will generate a `configuration requested` signal. If during the request, the RX line is not stable low the receiver will exit this state and will enter the `IDLE` state!
 
 
   ## Transmitter
 
-  The transmitter module is responsable of managing the right transmission timing based on the device configuration. 
+  The transmitter module is responsable for managing the right transmission timing based on the device configuration and the generation of the configuration request signal. 
   
   It contains a 64 bytes FIFO buffer which can be used with the **TX data stream mode** (DSM) to send a burst of data: the CPU will write the `TXR` register multiple times, then wait for the transmitter to end its task. If the DSM is enabled the transmitter will assert the `tx_done` signal once the buffer is empty, otherwise it will be asserted for every packet sent.  
 
-  If the device wants to send a configuration request, the transmitter will deassert the TX line for 10ms, then it will enter in the main state ready to send configuration packets. 
+  If the device wants to send a configuration request, the transmitter will lower the TX line for 1ms (logic 0), then it will enter in the main state ready to send configuration packets. 
 
 
   ## Interrupt
