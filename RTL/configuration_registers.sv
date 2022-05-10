@@ -9,7 +9,8 @@ module configuration_registers (
   input  logic [2:0]  address_i,
   inout  logic [7:0]  data_io,  
   input  logic        STR_en_i,
-
+  input  logic        set_std_config_i,
+ 
   /* STR */
   input  logic [1:0]  data_width_i,
   input  logic [1:0]  parity_mode_i,
@@ -20,6 +21,9 @@ module configuration_registers (
   output logic [1:0]  data_width_o,
   output logic [1:0]  parity_mode_o,
   output logic [1:0]  stop_bits_o,
+  output logic [1:0]  updated_data_width_o,
+  output logic [1:0]  updated_parity_mode_o,
+  output logic [1:0]  updated_stop_bits_o,  
 
   /* DVR */
   output logic [15:0] divisor_o,
@@ -32,6 +36,7 @@ module configuration_registers (
 
   /* CTR */
   input  logic        config_done_i,
+  input  logic        int_pend_i,
 
   output logic [1:0]  communication_mode_o,
   output logic        enable_config_o,
@@ -83,11 +88,43 @@ module configuration_registers (
         end
       end : STR_WR
 
+  assign updated_data_width_o = STR_data.DWID;
+  assign updated_parity_mode_o = STR_data.PMID;
+  assign updated_stop_bits_o = STR_data.SBID;
+
+  logic [1:0] data_width, parity_mode, stop_bits;
+
+  logic config_done;
+  logic std_config;
+
+  edge_detector #(1) config_done_edge (
+    .clk_i        ( clk_i         ),
+    .signal_i     ( config_done_i ),
+    .edge_pulse_o ( config_done   )
+  );
+
+      /* Since the device must not change immediatly the configuration
+       * state but only after the configuration process, store the old
+       * configuration in the register which is used to drive the 
+       * modules configuration information. Update the configuration 
+       * when the process has ended */
+      always_ff @(posedge clk_i) begin : config_register
+        if ((!rst_n_i) | set_std_config_i | std_config) begin
+          data_width <= STD_DATA_WIDTH;
+          parity_mode <= STD_PARITY_MODE;
+          stop_bits <= STD_STOP_BITS;
+        end else if (config_done) begin
+          data_width <= STR_data.DWID;
+          parity_mode <= STR_data.PMID;
+          stop_bits <= STR_data.SBID;          
+        end
+      end : config_register
+
   assign tx_dsm_o = STR_data.TDSM;
   assign rx_dsm_o = STR_data.RDSM;
-  assign data_width_o = STR_data.DWID;
-  assign parity_mode_o = STR_data.PMID;
-  assign stop_bits_o = STR_data.SBID;
+  assign data_width_o = data_width;
+  assign parity_mode_o = parity_mode;
+  assign stop_bits_o = stop_bits;
 
 
   logic change_config;
@@ -168,11 +205,15 @@ module configuration_registers (
         end 
       end : CTR_WR
 
+  assign std_config = CTR_data.STDC;
+
       always_ff @(posedge clk_i) begin : CTR_R
         if (!rst_n_i) begin 
           CTR_data.CDONE <= 1'b1;
+          CTR_data.INTPEND <= 1'b0;
         end else begin 
           CTR_data.CDONE <= config_done_i;
+          CTR_data.INTPEND <= int_pend_i;
         end
       end : CTR_R
 

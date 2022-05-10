@@ -72,9 +72,9 @@ module receiver (
 //  PARAMETERS  //
 //--------------//
 
-  /* How many clock cycles does it need to reach 10 ms */ 
+  /* How many clock cycles does it need to reach 1 ms */ 
   /* based on a specific system clock */
-  localparam COUNT_10MS = SYSTEM_CLOCK_FREQ / 100;
+  localparam COUNT_1MS = SYSTEM_CLOCK_FREQ / 1000;
 
   /* Index in fifo data */
   localparam FRAME = 9;
@@ -147,7 +147,7 @@ module receiver (
 
   /* Counter to determine the amount of time the RX line 
    * stays low during configuration request */
-  logic [$clog2(COUNT_10MS) - 1:0] counter_10ms[NXT:CRT];
+  logic [$clog2(COUNT_1MS) - 1:0] counter_10ms[NXT:CRT];
 
       always_ff @(posedge clk_i) begin : ms10_counter
         if (!rst_n_i) begin 
@@ -160,7 +160,7 @@ module receiver (
       always_comb begin : ms10_counter_logic
         if (rx_i != RX_LINE_IDLE) begin 
           counter_10ms[NXT] = counter_10ms[CRT] + 1'b1;
-        end else if (counter_10ms[CRT] == COUNT_10MS) begin 
+        end else if (counter_10ms[CRT] == COUNT_1MS) begin 
           counter_10ms[NXT] = 'b0;
         end else begin 
           counter_10ms[NXT] = 'b0;
@@ -269,7 +269,7 @@ module receiver (
         fifo_if.write_i = 1'b0;
         fifo_rst_n = 1'b1;
 
-        if (counter_10ms[CRT] == COUNT_10MS) begin 
+        if (counter_10ms[CRT] == COUNT_1MS) begin 
           cfg_req[NXT] = 1'b1;
           state[NXT] = RX_IDLE;
           
@@ -306,7 +306,7 @@ module receiver (
 
             /* Go in IDLE then wait the request. The master won't initiate
              * other transaction until the request is acknowledged */
-            if (counter_10ms[CRT] == COUNT_10MS) begin 
+            if (counter_10ms[CRT] == COUNT_1MS) begin 
               cfg_req[NXT] = 1'b1;
               state[NXT] = RX_IDLE;
             end
@@ -478,22 +478,8 @@ module receiver (
   assign overrun_error_o = fifo_if.rd_data_o[OVERRUN] & rx_fifo_read_i;
   assign parity_o = fifo_if.rd_data_o[PARITY_BIT] & rx_fifo_read_i;
 
-
-//---------------------------//
-//  FIFO FULL EDGE DETECTOR  //
-//---------------------------//
-
-  logic rx_full_posedge;
-
-  edge_detector #(1) posedge_detector (
-    .clk_i        ( clk_i           ),
-    .signal_i     ( fifo_if.full_o  ),
-    .edge_pulse_o ( rx_full_posedge )
-  );
-
-  /* Detect the rising edge of fifo full signal. If the threshold is set to 0 and DSM is active, the signal 'rxd_rdy_o'
-   * already signal the fifo being full. */
-  assign rx_fifo_full_o = (rx_data_stream_mode_i & (threshold_i == 6'b0)) ? 1'b0 : rx_full_posedge;
+  /* If the threshold is set to 0 and DSM is active, the signal 'rxd_rdy_o' already signal the fifo being full. */
+  assign rx_fifo_full_o = (rx_data_stream_mode_i & (threshold_i == 6'b0)) ? 1'b0 : fifo_if.full_o;
 
 
 //--------------//
@@ -502,7 +488,7 @@ module receiver (
 
   /* Reset FSM state with an acknowledge */
   property req_ackn_state_chk;
-    @(posedge clk_i) ((counter_10ms[CRT] == COUNT_10MS) && req_ackn_i) |=> (state[CRT] == RX_IDLE);
+    @(posedge clk_i) ((counter_10ms[CRT] == COUNT_1MS) && req_ackn_i) |=> (state[CRT] == RX_IDLE);
   endproperty
 
   /* While not in data stream mode, the interrupt must be asserted while receiving the stop bits */

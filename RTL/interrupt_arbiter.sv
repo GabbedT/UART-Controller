@@ -146,9 +146,25 @@ module interrupt_arbiter (
 //  PRIORITY 2 FIFO  //
 //-------------------//
 
+  logic rx_rdy_posedge;
+
+  edge_detector #(1) rx_rdy_posedge_detector (
+    .clk_i        ( clk_i          ),
+    .signal_i     ( rx_rdy_i       ),
+    .edge_pulse_o ( rx_rdy_posedge )
+  );
+
+  logic rx_full_posedge;
+
+  edge_detector #(1) rx_full_posedge_detector (
+    .clk_i        ( clk_i           ),
+    .signal_i     ( rx_fifo_full_i  ),
+    .edge_pulse_o ( rx_full_posedge )
+  );
+
   logic prio2_fifo_write;
 
-  assign prio2_fifo_write = rx_fifo_full_i | rx_rdy;
+  assign prio2_fifo_write = rx_full_posedge | rx_rdy_posedge;
 
   /* FIFO interface assignment */
   sync_fifo_interface #(2) fifo_prio2_if(clk_i);
@@ -191,9 +207,17 @@ module interrupt_arbiter (
 //  PRIORITY 3 FIFO  //
 //-------------------//
 
+  logic config_req_slv_posedge;
+
+  edge_detector #(1) config_req_slv_posedge_detector (
+    .clk_i        ( clk_i                  ),
+    .signal_i     ( config_req_slv_i       ),
+    .edge_pulse_o ( config_req_slv_posedge )
+  );
+
   logic prio3_fifo_write;
 
-  assign prio3_fifo_write = tx_done_i | config_req_slv_i;
+  assign prio3_fifo_write = tx_done_i | config_req_slv_posedge;
 
   sync_fifo_interface #(2) fifo_prio3_if(clk_i);
 

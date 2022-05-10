@@ -65,9 +65,9 @@ module transmitter (
 //  PARAMETERS  //
 //--------------//
 
-  /* How many clock cycles does it need to reach 10 ms */ 
+  /* How many clock cycles does it need to reach 1 ms */ 
   /* based on a specific system clock */
-  localparam COUNT_10MS = SYSTEM_CLOCK_FREQ / 100;
+  localparam COUNT_1MS = SYSTEM_CLOCK_FREQ / 1000;
 
 
 //-----------//
@@ -105,7 +105,7 @@ module transmitter (
       end : data_register
 
 
-  logic [$clog2(COUNT_10MS) - 1:0] counter_10ms[NXT:CRT];
+  logic [$clog2(COUNT_1MS) - 1:0] counter_10ms[NXT:CRT];
 
       /* Counter to determine the amount of time the TX line 
        * must stay low during configuration request */
@@ -224,7 +224,7 @@ module transmitter (
             counter_10ms[NXT] = counter_10ms[CRT] + 1'b1;
             tx_line = !TX_LINE_IDLE;
 
-            if (counter_10ms[CRT] == COUNT_10MS) begin 
+            if (counter_10ms[CRT] == COUNT_1MS) begin 
               req_done_o = 1'b1;
               state[NXT] = TX_IDLE;
               counter_10ms[NXT] = 'b0;
@@ -357,7 +357,7 @@ endproperty
 
 /* While sending the request, the tx line must be stable for 10ms */
 property tx_stable_chk;
-  @(posedge clk_i) ((fifo_if.empty_o) && (state[CRT] == TX_CFG_REQ)) |-> (!tx_o[*COUNT_10MS]);
+  @(posedge clk_i) ((fifo_if.empty_o) && (state[CRT] == TX_CFG_REQ)) |-> (!tx_o[*COUNT_1MS]);
 endproperty
 
 /* Send two stop bits. Tx should be high for 2 clock cycles */

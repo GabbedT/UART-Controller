@@ -67,6 +67,7 @@ module main_controller (
   input  logic         config_req_mst_i,
   input  logic         set_std_config_i,
   input  uart_config_s config_i,
+  input  uart_config_s updated_config_i,
   input  logic         rx_data_stream_mode_i,
   input  logic         tx_data_stream_mode_i,
   input  logic         req_ackn_i,
@@ -74,6 +75,7 @@ module main_controller (
   output logic         STR_en_o,
   output uart_config_s config_o,
   output logic         config_req_mst_o,
+  output logic         set_std_config_o,
   output logic         rx_data_stream_mode_o,
   output logic         tx_data_stream_mode_o,
   output logic [1:0]   communication_mode_o,
@@ -91,20 +93,20 @@ module main_controller (
   output logic         parity_error_o
 );
 
-  /* How many clock cycles does it need to reach 50 ms */ 
+  /* How many clock cycles does it need to reach 10 ms */ 
   /* based on a specific system clock */
-  localparam COUNT_50MS = SYSTEM_CLOCK_FREQ / 20;
+  localparam COUNT_10MS = SYSTEM_CLOCK_FREQ / 100;
 
 //------------//
 //  DATAPATH  //
 //------------//
   /* Counter to 50ms */
-  logic [$clog2(COUNT_50MS) - 1:0] counter_50ms[NXT:CRT];
+  logic [$clog2(COUNT_10MS) - 1:0] counter_50ms[NXT:CRT];
 
       always_ff @(posedge clk_i) begin : ms50_counter
         if (!rst_n_i) begin   
           counter_50ms[CRT] <= 'b0;
-        end else if (counter_50ms[CRT] == COUNT_50MS) begin  
+        end else if (counter_50ms[CRT] == COUNT_10MS) begin  
           counter_50ms[CRT] <= 'b0;
         end else begin
           counter_50ms[CRT] <= counter_50ms[NXT];
@@ -181,6 +183,7 @@ module main_controller (
         communication_mode_o = communication_mode_i;
         config_error_o = 1'b0;
         config_done_o = 1'b0;
+        set_std_config_o = 1'b0;
 
         /* FIFO signals */
         rx_fifo_read_o = 1'b0;
@@ -196,9 +199,7 @@ module main_controller (
            */
           STD_CONFIG: begin 
             STR_en_o = 1'b1;
-            config_o.data_width = STD_DATA_WIDTH;
-            config_o.parity_mode = STD_PARITY_MODE;
-            config_o.stop_bits = STD_STOP_BITS;
+            set_std_config_o = 1'b1;
             rx_data_stream_mode_o = 1'b0;
             tx_data_stream_mode_o = 1'b0;
             communication_mode_o = STD_COMM_MODE;
@@ -267,7 +268,7 @@ module main_controller (
               config_error_o = 1'b1;
               config_failed[NXT] = 2'b0;
               state[NXT] = STD_CONFIG;
-            end else if (counter_50ms[CRT] != COUNT_50MS) begin
+            end else if (counter_50ms[CRT] != COUNT_10MS) begin
               /* Read the data when the fifo is not empty */
               rx_fifo_read_o = !rx_fifo_empty_i;
 
@@ -276,7 +277,7 @@ module main_controller (
               end else if (data_rx_i == ACKN_PKT) begin 
                 state[NXT] = SETUP_MST;
               end
-            end else if (counter_50ms[CRT] == COUNT_50MS) begin 
+            end else if (counter_50ms[CRT] == COUNT_10MS) begin 
               /* Try another request */
               config_failed[NXT] = config_failed[CRT] + 1'b1;
               state[NXT] = CFG_REQ_MST;
@@ -291,9 +292,9 @@ module main_controller (
             tx_fifo_write_o = 1'b1;
 
             case (config_packet_type[CRT])
-              DW_TYPE:   data_tx_o = assemble_packet(DATA_WIDTH_ID, config_i.data_width);
-              PM_TYPE:   data_tx_o = assemble_packet(PARITY_MODE_ID, config_i.parity_mode);
-              SB_TYPE:   data_tx_o = assemble_packet(STOP_BITS_ID, config_i.stop_bits);
+              DW_TYPE:   data_tx_o = assemble_packet(DATA_WIDTH_ID, updated_config_i.data_width);
+              PM_TYPE:   data_tx_o = assemble_packet(PARITY_MODE_ID, updated_config_i.parity_mode);
+              SB_TYPE:   data_tx_o = assemble_packet(STOP_BITS_ID, updated_config_i.stop_bits);
               EC_TYPE:   data_tx_o = assemble_packet(END_CONFIGURATION_ID, 2'b00);
             endcase
           end
@@ -325,7 +326,7 @@ module main_controller (
 
             /* If the packet hasn't been received in time, raise a configuration error and set
              * standard configuration */
-            if (counter_50ms[CRT] == COUNT_50MS) begin 
+            if (counter_50ms[CRT] == COUNT_10MS) begin 
               state[NXT] = STD_CONFIG;
               config_error_o = 1'b1;
             end else if (data_rx_i == ACKN_PKT) begin
@@ -356,7 +357,7 @@ module main_controller (
             /* Wait until a configuration packet arrives, then process the next configuration 
              * packet. If there is an error in the packet received, raise a configuration error
              * and use the standard configuration */
-            if (counter_50ms[CRT] != COUNT_50MS) begin
+            if (counter_50ms[CRT] != COUNT_10MS) begin
               if (!rx_fifo_empty_i) begin
                 config_packet_type[NXT] = config_packet_type[CRT] + 1'b1;
                 state[NXT] = SEND_ACKN_SLV;
@@ -473,7 +474,7 @@ endproperty : fail_req_ackn
 /* Check that the acknowledgement packet arrives in time */
 property ackn_timing;
   @(posedge clk_i) disable iff (!rst_n_i)
-  (state[CRT] == WAIT_REQ_ACKN_MST) && (!rx_fifo_empty_i) |-> ((counter_50ms[CRT] < COUNT_50MS) && (data_rx_i == ACKN_PKT));
+  (state[CRT] == WAIT_REQ_ACKN_MST) && (!rx_fifo_empty_i) |-> ((counter_50ms[CRT] < COUNT_10MS) && (data_rx_i == ACKN_PKT));
 endproperty : ackn_timing
 
 /* Configuration request signals must not be asserted when not in main state */

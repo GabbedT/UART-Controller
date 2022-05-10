@@ -58,12 +58,13 @@ module uart (
   logic         config_req_slv;
   logic         config_req_mst_i, config_req_mst_o;
   logic         set_std_config_i; 
-  uart_config_s config_i, config_o;
+  uart_config_s config_i, config_o, updated_config_i;
   logic         req_ackn;
   logic         config_done;
   logic         config_error;
   logic         parity_error;
   logic         STR_en;
+  logic         set_std_config;
 
 
   /* Receiver signals */
@@ -101,12 +102,14 @@ module uart (
     .config_req_mst_i        ( config_req_mst_i      ),
     .set_std_config_i        ( set_std_config_i      ),
     .config_i                ( config_i              ),
+    .updated_config_i        ( updated_config_i      ),
     .rx_data_stream_mode_i   ( rx_data_stream_mode_i ),
     .tx_data_stream_mode_i   ( tx_data_stream_mode_i ),
     .req_ackn_i              ( req_ackn              ),
     .STR_en_o                ( STR_en                ),
     .config_o                ( config_o              ),
     .config_req_mst_o        ( config_req_mst_o      ),
+    .set_std_config_o        ( set_std_config        ),
     .rx_data_stream_mode_o   ( rx_data_stream_mode_o ),
     .tx_data_stream_mode_o   ( tx_data_stream_mode_o ),
     .communication_mode_o    ( communication_mode_o  ),
@@ -231,43 +234,47 @@ module uart (
 //  REGISTERS  //
 //-------------//
 
-  configuration_registers u_configuration_registers (
-    .clk_i                   ( clk_i                 ),
-    .rst_n_i                 ( rst_n_i               ),
-    .read_i                  ( read                  ),
-    .write_i                 ( write                 ),
-    .address_i               ( address_i             ),
-    .data_io                 ( data_io               ),
-    .STR_en_i                ( STR_en                ),
-    .data_width_i            ( config_o.data_width   ),
-    .parity_mode_i           ( config_o.parity_mode  ),
-    .stop_bits_i             ( config_o.stop_bits    ),
-    .tx_dsm_o                ( tx_data_stream_mode_i ),
-    .rx_dsm_o                ( rx_data_stream_mode_i ),
-    .data_width_o            ( data_width            ),
-    .parity_mode_o           ( parity_mode           ),
-    .stop_bits_o             ( stop_bits             ),
-    .divisor_o               ( divisor               ),
-    .tx_fifo_full_i          ( tx_fifo_full          ),
-    .rx_fifo_empty_i         ( rx_fifo_empty         ),
-    .rx_fifo_threshold_o     ( threshold             ),
-    .config_done_i           ( config_done           ),
-    .communication_mode_o    ( communication_mode_i  ),
-    .enable_config_o         ( enable_config_receive ),
-    .ack_request_o           ( req_ackn              ),
-    .set_std_config_o        ( set_std_config        ),
-    .send_config_req_o       ( config_req_mst_i      ),
-    .interrupt_id_i          ( interrupt_id          ),
-    .interrupt_id_en_i       ( enable_int_id         ),
-    .rx_rdy_en_o             ( rx_rdy_en             ),
-    .frame_error_en_o        ( frame_error_en        ),
-    .parity_error_en_o       ( parity_error_en       ),
-    .overrun_error_en_o      ( overrun_error_en      ),
-    .int_ackn_o              ( int_ackn              ),
-    .rx_data_i               ( rx_data               ),
-    .rx_fifo_read_o          ( rx_fifo_read          ),
-    .tx_data_o               ( data_tx_i             ),
-    .tx_fifo_write_o         ( tx_fifo_write_i       )
+  configuration_registers config_registers (
+    .clk_i                   ( clk_i                        ),
+    .rst_n_i                 ( rst_n_i                      ),
+    .read_i                  ( read                         ),
+    .write_i                 ( write                        ),
+    .address_i               ( address_i                    ),
+    .data_io                 ( data_io                      ),
+    .STR_en_i                ( STR_en                       ),
+    .set_std_config_i        ( set_std_config               ),
+    .data_width_i            ( config_o.data_width          ),
+    .parity_mode_i           ( config_o.parity_mode         ),
+    .stop_bits_i             ( config_o.stop_bits           ),
+    .tx_dsm_o                ( tx_data_stream_mode_i        ),
+    .rx_dsm_o                ( rx_data_stream_mode_i        ),
+    .data_width_o            ( data_width                   ),
+    .parity_mode_o           ( parity_mode                  ),
+    .stop_bits_o             ( stop_bits                    ),
+    .updated_data_width_o    ( updated_config_i.data_width  ),
+    .updated_parity_mode_o   ( updated_config_i.parity_mode ),
+    .updated_stop_bits_o     ( updated_config_i.stop_bits   ),
+    .divisor_o               ( divisor                      ),
+    .tx_fifo_full_i          ( tx_fifo_full                 ),
+    .rx_fifo_empty_i         ( rx_fifo_empty                ),
+    .rx_fifo_threshold_o     ( threshold                    ),
+    .config_done_i           ( config_done                  ),
+    .communication_mode_o    ( communication_mode_i         ),
+    .enable_config_o         ( enable_config_receive        ),
+    .ack_request_o           ( req_ackn                     ),
+    .set_std_config_o        ( set_std_config               ),
+    .send_config_req_o       ( config_req_mst_i             ),
+    .interrupt_id_i          ( interrupt_id                 ),
+    .interrupt_id_en_i       ( enable_int_id                ),
+    .rx_rdy_en_o             ( rx_rdy_en                    ),
+    .frame_error_en_o        ( frame_error_en               ),
+    .parity_error_en_o       ( parity_error_en              ),
+    .overrun_error_en_o      ( overrun_error_en             ),
+    .int_ackn_o              ( int_ackn                     ),
+    .rx_data_i               ( data_rx                      ),
+    .rx_fifo_read_o          ( rx_fifo_read                 ),
+    .tx_data_o               ( data_tx_i                    ),
+    .tx_fifo_write_o         ( tx_fifo_write_i              )
   );
 
 endmodule : uart
