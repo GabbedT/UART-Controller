@@ -12,39 +12,13 @@ class uart_trx;
   /* DUT data */
   bit [7:0] data_io;
   bit [2:0] address_i;
-  bit read_i;
-  bit write_i;
+  bit chip_sel_n_i;
+  bit read_write_i;
   bit rx_i;
   bit tx_o;
-  bit irq_n_o;
+  bit ireq_n_o;
 
   /* Testbench data */
-
-  typedef enum int {
-    /* Write STR */
-    CHANGE_CONFIG ,
-
-    /* Read STR */
-    READ_CONFIG,
-
-    /* Set RX threshold */
-    SET_THRESHOLD,
-
-    /* Set communication mode */
-    SET_COM_MODE,
-
-    /* Enable or disable configurations requests */
-    ENABLE_CONFIG_REQ,
-
-    /* Random enable interrupt */
-    ENABLE_INTERRUPT,
-
-    /* Read RXR */
-    READ_DATA,
-
-    /* Write TXR */
-    SEND_DATA
-  } operation_t;
 
   rand operation_t operation;
 
@@ -59,14 +33,14 @@ class uart_trx;
 
   /* Set operation frequency */
   constraint operation_frequency_c { operation dist { 
-      READ_DATA         := 40,
-      SEND_DATA         := 40,
-      CHANGE_CONFIG     := 3,
-      SET_THRESHOLD     := 3,
-      SET_COM_MODE      := 4,
-      ENABLE_CONFIG_REQ := 3,
-      ENABLE_INTERRUPT  := 3,
-      NO_OPERATION      := 30
+      READ_DATA          := 40,
+      SEND_DATA          := 20,
+      SEND_DATA_BURST    := 20,
+      SET_THRESHOLD      := 3,
+      SET_COM_MODE       := 3,
+      ENABLE_CONFIG_REQ  := 3,
+      ENABLE_INTERRUPT   := 3,
+      NO_OPERATION       := 30
   };}
 
   /* Don't set disabled communication */

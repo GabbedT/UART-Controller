@@ -9,34 +9,51 @@ import registers_pkg::*;
 
 class uart_driver;
 
-  /* Transmitter connected to DUT signals */
+  /* Receiver */
+  uart_rx_driver rx;
+  rx_interface rx_if;
+  mailbox rx2mon_mbx;
+  event rxDone_ev;
+
+  /* Transmitter */
+  uart_tx_driver tx;
   tx_interface tx_if;
-
-  /* DUT interface */
-  uart_interface uart_if;
-
-  mailbox gen2drv_mbx;
-  mailbox drv2mon_mbx;
-
-  event drvDone_ev;
+  mailbox tx2mon_mbx;
   event txDone_ev;
 
-  uart_trx pkt;
+  /* DUT */
+  uart_interface uart_if;
 
-  bit [7:0] data;
+  /* Driver */
+  mailbox gen2drv_mbx;
+  event drvDone_ev;
+  uart_trx pkt;
 
 
 //---------------//
 //  CONSTRUCTOR  //
 //---------------//
 
-  function new(input virtual uart_interface uart_if, input mailbox gen2drv, input mailbox drv2mon, input event drvDone, input virtual tx_interface tx_if);
+  function new(input virtual uart_interface uart_if, input mailbox gen2drv_mbx, input event drvDone_ev,
+               input virtual rx_interface rx_if, input mailbox rx2mon_mbx, input event rxDone_ev,
+               input virtual tx_interface tx_if, input mailbox tx2mon_mbx, input event txDone_ev);
+
     this.uart_if = uart_if;
     this.tx_if = tx_if;
+    this.rx_if = rx_if;
+
     this.gen2drv_mbx = gen2drv;
-    this.drv2mon_mbx = drv2mon;
+    this.rx2mon_mbx = rx2mon_mbx;
+    this.tx2mon_mbx = tx2mon_mbx;
+
     this.drvDone_ev = drvDone;
+    this.rxDone_ev = rxDone_ev;
+    this.txDone_ev = txDone_ev;
+
     this.pkt = new();
+
+    this.rx = new(rx_if, rx2mon_mbx, rxDone_ev);
+    this.tx = new(tx_if, tx2mon_mbx, txDone_ev);
   endfunction : new
 
 
@@ -47,57 +64,21 @@ class uart_driver;
   /* 
    *  Reset the DUT, used in the pre test 
    */
-  task reset();
+  task automatic reset();
     wait(!uart_if.rst_n_i);
     $display("[Driver][%0dns] Resetting DUT and transmitter...", $time); 
     tx_if.reset();
+    rx_if.reset();
     uart_if.reset();
     wait(uart_if.rst_n_i);
     $display("[Driver][%0dns] Reset completed!", $time); 
   endtask : reset
 
-  /* 
-   *  Basic task of transmitter module 
-   */
-  task drive_rx_port();
-    forever begin 
-      /* Assign configuration */
-      tx_if.data_width_i <= pkt.data_width;
-      tx_if.stop_bits_i <= pkt.stop_bits;
-      tx_if.parity_mode_i <= pkt.parity_mode;
-
-      /* Write TX FIFO, then wait for the transmitter
-       * to end its task */
-      tx_if.tx_fifo_write_i <= !tx_if.tx_fifo_full_o;
-      tx_if.data_tx_i <= $urandom();
-      @(posedge tx_if.clk_i);
-      tx_if.tx_fifo_write_i <= 1'b0;
-      
-      $display("[Driver][%0dns] Transmitter is sending data...", $time); 
-      wait(tx_if.tx_done_o);
-      $display("[Driver][%0dns] Transmission done!", $time); 
-      ->txDone_ev;
-    end
-  endtask : drive_rx_port
-
-
-  /* 
-   *  Send configuration request 
-   */
-  task tx_config_req();
-    $display("[Driver][%0dns] Sending configuration request", $time); 
-    tx_if.config_req_mst_i <= 1'b1;
-    @(posedge tx_if.clk_i);
-    tx_if.config_req_mst_i <= 1'b0;
-    wait(tx_if.req_done_o);
-    $display("[Driver][%0dns] Request completed", $time); 
-  endtask : tx_config_req
-
   
   /* 
    *  Drive the uart based on the operation  
    */
-  task uart_drive();
+  task automatic uart_drive();
     forever begin
       if (pkt.operation != NO_OPERATION) begin 
         ++pkt.coverage[pkt.operation];
@@ -112,8 +93,8 @@ class uart_driver;
           uart_write_TXdata($urandom());
         end
 
-        CHANGE_CONFIG: begin 
-          uart_config_change();
+        SEND_DATA_BURST: begin 
+          uart_send_burst($urandom_range(63));
         end
 
         SET_THRESHOLD: begin 
@@ -132,6 +113,10 @@ class uart_driver;
           uart_enable_interrupt();
         end
 
+        SEND_DATA_BURST: begin 
+          uart_send_burst($urandom_range(UART_pkg::TX_FIFO_DEPTH));
+        end
+
         NO_OPERATION: begin 
           repeat(20) @(posedge uart_if.clk_i);
         end
@@ -143,12 +128,14 @@ class uart_driver;
   /* 
    *  Read a register 
    */
-  task uart_read_register(input bit [2:0] address, output bit [7:0] data);
+  task automatic uart_read_register(input bit [2:0] address, output bit [7:0] data);
     uart_if.address_i <= address;
-    uart_if.read_i <= 1'b1;
-    @(posedge uart_if.clk_i);
-    uart_if.read_i <= 1'b0;
+    uart_if.read_write_i <= READ;
+    uart_if.enable_chip();
     data <= uart_if.data_io;
+    @(posedge uart_if.clk_i);
+
+    uart_if.disable_chip();
     $display("[Driver][%0dns] Register %0d read: 0x%0h", $time, address, data); 
   endtask : uart_read_register
 
@@ -156,13 +143,15 @@ class uart_driver;
   /* 
    *  Write a register 
    */
-  task uart_write_register(input bit [2:0] address, input bit [7:0] data);
+  task automatic uart_write_register(input bit [2:0] address, input bit [7:0] data);
     $display("[Driver][%0dns] Writing data 0x%0h into register %0d", $time, data, address); 
     uart_if.address_i <= address;
-    uart_if.write_i <= 1'b1;
+    uart_if.read_write_i <= WRITE;
     uart_if.data_io <= data;
+    uart_if.enable_chip();
     @(posedge uart_if.clk_i);
-    uart_if.write_i <= 1'b0;
+
+    uart_if.disable_chip();
     $display("[Driver][%0dns] Register written!", $time); 
   endtask : uart_write_register
 
@@ -170,19 +159,23 @@ class uart_driver;
   /* 
    *  Read data from RXR register 
    */
-  task uart_read_RXdata(output bit [7:0] data);
+  task automatic uart_read_RXdata(output bit [7:0] data);
     FSR_data_t temp_data;
 
     /* Assert that RX FIFO is not empty */
     uart_if.address_i <= FSR_ADDR;
-    uart_if.read_i <= 1'b1;
-    @(posedge uart_if.clk_i);
-    uart_if.read_i <= 1'b0;
+    uart_if.read_write_i <= READ;
+    uart_if.enable_chip();
     temp_data <= uart_if.data_io;
+    @(posedge uart_if.clk_i);
+
+    uart_if.disable_chip();
 
     /* If it's not empty read the register */
     if (!temp_data.RXE) begin 
       uart_read_register(RXR_ADDR, data);
+    end else begin 
+      $display("[Driver][%0dns] RX FIFO empty!", $time); 
     end
   endtask : uart_read_RXdata
 
@@ -190,47 +183,33 @@ class uart_driver;
   /* 
    *  Write data into TXR register 
    */
-  task uart_write_TXdata(input bit [7:0] data);
+  task automatic uart_write_TXdata(input bit [7:0] data);
     FSR_data_t temp_data;
 
     /* Assert that TX FIFO is not full */
     uart_if.address_i <= FSR_ADDR;
-    uart_if.read_i <= 1'b1;
-    @(posedge uart_if.clk_i);
-    uart_if.read_i <= 1'b0;
+    uart_if.read_write_i <= READ;
+    uart_if.enable_chip();
     temp_data <= uart_if.data_io;
+    @(posedge uart_if.clk_i);
+    uart_if.disable_chip();
 
     /* If it's not full write the register */
     if (!temp_data.TXF) begin 
       uart_write_register(TXR_ADDR, data);
+    end else begin 
+      $display("[Driver][%0dns] TX FIFO full!", $time); 
     end
   endtask : uart_write_TXdata
 
 
   /* 
-   *  Modify UART configuration 
-   */
-  task uart_config_change();
-    $display("[Driver][%0dns] Changing configuration...", $time); 
-
-    /* Read STR and modify if, then write it back */
-    FSR_data_t temp_data;
-    uart_read_register(STR_ADDR, temp_data); 
-    temp_data[5:0] <= {$urandom_range(3), $urandom_range(3), $urandom_range(3)};
-    $display("[Driver][%0dns] Data Width %0b", $time, temp_data[1:0]); 
-    $display("[Driver][%0dns] Parity Mode %0b", $time, temp_data[3:2]); 
-    $display("[Driver][%0dns] Stop Bits %0b", $time, temp_data[5:4]); 
-    uart_write_register(STR_ADDR, temp_data);
-  endtask : uart_config_change
-
-
-  /* 
    *  Set RX FIFO interrupt threshold value 
    */
-  task uart_set_threshold();
+  task automatic uart_set_threshold();
+    FSR_data_t temp_data;
     $display("[Driver][%0dns] Modifing threshold...", $time); 
 
-    FSR_data_t temp_data;
     uart_read_register(FSR_ADDR, temp_data);
     temp_data.RX_TRESHOLD <= $urandom_range(63);
     $display("[Driver][%0dns] Threshold new value: %0d", $time, temp_data.RX_TRESHOLD); 
@@ -241,7 +220,7 @@ class uart_driver;
   /* 
    *  Set communication mode 
    */
-  task uart_set_communication_mode();
+  task automatic uart_set_communication_mode();
     CTR_data_t temp_data;
     uart_read_register(CTR_ADDR, temp_data);
     temp_data.COM <= $urandom_range(3);
@@ -252,7 +231,7 @@ class uart_driver;
   /* 
    *  Enable or disable receiving configuration requests 
    */
-  task uart_enable_config_req();
+  task automatic uart_enable_config_req();
     CTR_data_t temp_data;
     uart_read_register(CTR_ADDR, temp_data);
     temp_data.ENREQ <= $urandom_range(1);
@@ -264,7 +243,7 @@ class uart_driver;
   /* 
    *  Enable or disable interrupt sources
    */
-  task uart_enable_interrupt();
+  task automatic uart_enable_interrupt();
     ISR_data_t temp_data;
     uart_read_register(ISR_ADDR, temp_data);
     temp_data.RXRDY <= $urandom_range(1);
@@ -277,7 +256,7 @@ class uart_driver;
   /* 
    *  Read interrupt ID 
    */
-  task uart_read_intID(output bit [2:0] id);
+  task automatic uart_read_intID(output bit [2:0] id);
     ISR_data_t temp_data;
     uart_read_register(ISR_ADDR, temp_data);
     id <= temp_data.INTID; 
@@ -288,52 +267,43 @@ class uart_driver;
   /* 
    *  Clear interrupt 
    */
-  task uart_clear_interrupt(output bit [7:0] data_read[64]);
+  task automatic uart_clear_interrupt(output bit [7:0] data_read[64]);
     bit [2:0] id;
-    bit [7:0] data[];
+    bit [7:0] data;
     uart_read_intID(id);
 
     case (id)
       INT_TX_DONE: begin 
-        bit [7:0] temp_data;
-
         /* Set acknowledge bit */
-        uart_read_register(ISR_ADDR, temp_data);
-        data[0] <= 1'b1;
-        uart_write_register(ISR_ADDR, temp_data);
+        uart_read_register(ISR_ADDR, data);
+        data <= 1'b1;
+        uart_write_register(ISR_ADDR, data);
       end
 
       INT_CONFIG_FAIL: begin 
-        bit [7:0] temp_data;
-
         /* Set acknowledge bit */
-        uart_read_register(ISR_ADDR, temp_data);
-        data[0] <= 1'b1;
-        uart_write_register(ISR_ADDR, temp_data);      
+        uart_read_register(ISR_ADDR, data);
+        data <= 1'b1;
+        uart_write_register(ISR_ADDR, data);      
       end
 
       INT_CONFIG_REQ: begin 
-        bit [7:0] temp_data;
-
         /* Set acknowledge bit */
-        uart_read_register(ISR_ADDR, temp_data);
-        data[0] <= 1'b1;
-        uart_write_register(ISR_ADDR, temp_data);      
+        uart_read_register(ISR_ADDR, data);
+        data <= 1'b1;
+        uart_write_register(ISR_ADDR, data);      
       end
 
       INT_OVERRUN: begin 
-        data = new[1];
-        uart_read_RXdata(data[0]);
+        uart_read_RXdata(data);
       end
 
       INT_PARITY: begin 
-        data = new[1];
-        uart_read_RXdata(data[0]);
+        uart_read_RXdata(data);
       end
 
       INT_FRAME: begin 
-        data = new[1];
-        uart_read_RXdata(data[0]);
+        uart_read_RXdata(data);
       end
 
       INT_RXD_RDY: begin 
@@ -342,29 +312,36 @@ class uart_driver;
 
         /* Check if RX data stream mode is enabled */
         if (temp_data[6]) begin 
-          /* Generate an array able to store all 
-           * the buffer data */
           uart_read_register(FSR_ADDR, temp_data);
-          data = new[temp_data[5:0]];
 
           /* Read until RX buffer is empty */
           for (int i = 0; temp_data[6] == 1'b1; i++) begin 
-            uart_read_RXdata(data[i]);
+            uart_read_RXdata(data_read[i]);
           end
         end else begin
           data = new[1];
-          uart_read_RXdata(data[0]);
+          uart_read_RXdata(data_read[0]);
         end
       end
 
       INT_RX_FULL: begin 
         /* Read until RX buffer is empty */
         for (int i = 0; i < 64; i++) begin 
-          uart_read_RXdata(data[i]);
+          uart_read_RXdata(data_read[i]);
         end        
       end
     endcase
   endtask : uart_clear_interrupt
+
+
+  /* 
+   *  Write a burst of data by writing the TXR register multiple times  
+   */
+  task automatic uart_send_burst(input int burst_length);
+    for (int i = 0; i < burst_length; i++) begin
+      uart_write_TXdata($urandom());
+    end
+  endtask : uart_send_burst
 
 
 //--------//
@@ -373,7 +350,17 @@ class uart_driver;
 
   task main();
     fork 
-      
+      begin : dut
+        uart_drive();
+      end : dut 
+
+      begin : rx 
+        rx_if.main();
+      end : rx 
+
+      begin : tx  
+        repeat(256) tx_if.main();
+      end : tx 
     join
   endtask : main 
 
