@@ -72,10 +72,6 @@ module receiver (
 //  PARAMETERS  //
 //--------------//
 
-  /* How many clock cycles does it need to reach 1 ms */ 
-  /* based on a specific system clock */
-  localparam COUNT_1MS = SYSTEM_CLOCK_FREQ / 1000;
-
   /* Index in fifo data */
   localparam FRAME = 9;
   localparam OVERRUN = 10;
@@ -241,6 +237,8 @@ module receiver (
 
       always_ff @(posedge clk_i) begin : fsm_state_register
         if (!rst_n_i) begin 
+          state[CRT] <= RX_IDLE;
+        end else if (fifo_rst_n) begin 
           state[CRT] <= RX_IDLE;
         end else begin 
           state[CRT] <= state[NXT];

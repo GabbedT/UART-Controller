@@ -69,7 +69,7 @@ module interrupt_arbiter (
 
   output logic [2:0] interrupt_vector_o,
   output logic       enable_int_vec_o,
-  output logic       irq_n_o
+  output logic       ireq_n_o
 );
 
   /* Next and current state */
@@ -285,7 +285,7 @@ module interrupt_arbiter (
         end
       end
 
-  assign irq_n_o = irq_n[CRT];
+  assign ireq_n_o = irq_n[CRT];
 
 
 //-------------//

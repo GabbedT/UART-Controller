@@ -3,33 +3,42 @@ import main_controller_pkg::*;
 module uart (
   input  logic       clk_i,
   input  logic       rst_n_i,
+  input  logic       chip_sel_n_i,
   input  logic [2:0] address_i,
-  input  logic       read_i,
-  input  logic       write_i,
+  input  logic       read_write_i,
   inout  logic [7:0] data_io,
   input  logic       rx_i,
 
   output logic       tx_o,
-  output logic       irq_n_o
+  output logic       ireq_n_o
 );
 
 //---------------------//
 //  POSEDGE DETECTORS  //
 //---------------------//
 
+  /* Gated with chip select */
+  logic read_cs, write_cs;
+
+  /* Read is active high */
+  assign read_cs = read_write_i & !chip_sel_n_i;
+
+  /* Write is active low */
+  assign write_cs = !(read_write_i | chip_sel_n_i);
+
   /* Read and write signal must stay low for only 1 clock cycle */
   logic read, write;
 
-  edge_detector #(1) posedge_read (
+  edge_detector #(1) posedge_read_det (
     .clk_i        ( clk_i   ),
-    .signal_i     ( read_i  ),
+    .signal_i     ( read_cs ),
     .edge_pulse_o ( read    )
   );
 
-  edge_detector #(1) posedge_write (
-    .clk_i        ( clk_i   ),
-    .signal_i     ( write_i ),
-    .edge_pulse_o ( write   )
+  edge_detector #(0) negedge_write_det (
+    .clk_i        ( clk_i    ),
+    .signal_i     ( write_cs ),
+    .edge_pulse_o ( write    )
   );
 
 //-----------------------//
@@ -143,6 +152,7 @@ module uart (
     .data_tx_i             ( data_tx_o             ),
     .tx_fifo_write_i       ( tx_fifo_write_o       ),
     .config_req_mst_i      ( config_req_mst_o      ),
+    .config_req_slv_i      ( config_req_slv        ),
     .tx_data_stream_mode_i ( tx_data_stream_mode_o ),
     .data_width_i          ( data_width            ),
     .stop_bits_number_i    ( stop_bits             ),
@@ -226,7 +236,7 @@ module uart (
     .rx_fifo_empty_i       ( rx_fifo_empty         ),
     .interrupt_vector_o    ( interrupt_id          ),
     .enable_int_vec_o      ( enable_int_id         ),
-    .irq_n_o               ( irq_n_o               )
+    .ireq_n_o              ( ireq_n_o              )
   );
 
 

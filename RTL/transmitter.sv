@@ -49,6 +49,7 @@ module transmitter (
   input  logic [7:0]   data_tx_i,
   input  logic         tx_fifo_write_i,
   input  logic         config_req_mst_i,
+  input  logic         config_req_slv_i,
   input  logic         tx_data_stream_mode_i,
   input  logic [1:0]   data_width_i,
   input  logic [1:0]   stop_bits_number_i,
@@ -61,15 +62,6 @@ module transmitter (
   output logic         tx_fifo_full_o
 );
 
-//--------------//
-//  PARAMETERS  //
-//--------------//
-
-  /* How many clock cycles does it need to reach 1 ms */ 
-  /* based on a specific system clock */
-  localparam COUNT_1MS = SYSTEM_CLOCK_FREQ / 1000;
-
-
 //-----------//
 //  TX FIFO  //
 //-----------//
@@ -79,7 +71,7 @@ module transmitter (
 
   assign fifo_if.wr_data_i = data_tx_i;
   assign fifo_if.write_i = tx_fifo_write_i;
-  assign fifo_if.rst_n_i = rst_n_i; 
+  assign fifo_if.rst_n_i = rst_n_i | config_req_slv_i; 
 
   /* FIFO buffer instantiation in FWFT mode */
   sync_FIFO_buffer #(TX_FIFO_DEPTH, 1) tx_fifo (fifo_if);
@@ -175,6 +167,8 @@ module transmitter (
 
       always_ff @(posedge clk_i) begin : fsm_state_register
         if (!rst_n_i) begin 
+          state[CRT] <= TX_IDLE;
+        end else if (config_req_slv_i) begin 
           state[CRT] <= TX_IDLE;
         end else begin 
           state[CRT] <= state[NXT];
