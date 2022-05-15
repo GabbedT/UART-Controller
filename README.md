@@ -366,7 +366,7 @@
   At that point the slave device detects the request: it will interrupt and **reset the TX FIFO!** So data will be lost. The slave then has 10ms to retrieve any data into the RX FIFO and acknowledge the request: **after the acknowledge the RX FIFO will be resetted!** The acknowledge can be done by setting the `IACK` bit into the `ISR` register. 
   Once the device (both master and slave) detects that a configuration process is happening they will reset the `CDONE` bit in the `CTR` register.
   
-  At this point the hardware will completely take care of the process (see [configuration Protocol](#configuration-protocol) and [main Controller](#main-controller)). Once the configuration process ended, the `CDONE` bit will be setted, so after a configuration, that bit should be polled before sending any data.  
+  At this point the hardware will completely take care of the process (see [configuration protocol](#configuration-protocol) and [main controller](#main-controller)). Once the configuration process ended, the `CDONE` bit will be setted, so after a configuration, that bit should be polled before sending any data.  
 
   ### Enable configuration request
 
