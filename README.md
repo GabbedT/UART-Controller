@@ -31,6 +31,7 @@
     - [Fields Description](#fields-description-5)
 - [Operations](#operations)
   - [Configuration](#configuration)
+    - [Configuration request](#configuration-request)
     - [Enable configuration request](#enable-configuration-request)
     - [Transmitter Data Stream Mode](#transmitter-data-stream-mode)
     - [Receiver Data Stream Mode](#receiver-data-stream-mode)
@@ -59,15 +60,16 @@
   | Signal  | Direction | Description |
   | ------- | --------- | ----------- |
   | D0 - D7 | Input / Output | Data bus | 
-  | A0 - A2 | Input          | Address bus for registers |
-  | WR      | Input          | Write signal |
-  | RD      | Input          | Read signal  |
+  | WR/<ins>WR</ins>      | Input          | Read active high, write active low |
+  | <ins>CS<ins>          | Input   | Chip select active low, if deasserted the data line is set in high impedance state
+  | VDD | Input              | Power supply |
+  | A0 - A2 | Input       | Address bus for registers |
   | TX      | Output         | Transmitter data line |
   | RX      | Input          | Receiver data line | 
-  | <ins>RST</ins> | Input   | Reset active low  | 
-  | VDD | Input              | Power supply |
+  | <ins>RST</ins> | Input   | Reset active low  |
+  | CLK       | Input        | Clock        |
+  | <ins>IREQ</ins> | Output  | Interrupt request active low  |
   | GND | Input              | Ground       | 
-  | <ins>IRQ</ins> | Output  | Interrupt request active low  |
 
   
   ## Configuration Protocol
@@ -353,6 +355,18 @@
 # Operations
 
   ## Configuration
+
+  ### Configuration request
+
+  This section describes the configuration process from both an hardware and a software point of view.
+
+  To enable correct communication between two devices, those must agree on four different configuration parameters: *baud rate*, *data width*, *parity mode* and *stop bits number*.
+  This protocol focus on the configuration of the last three parameter. To start a configuration process, the programmer must ensure that **both TX and RX FIFOs are empty**, then simply write in the `STR` register a different configuration, once the hardware detects a change in the parameters, it become the master and sends three `SYN` characters. Once the transmission is ended, it send the request (TX low for 1ms). 
+  
+  At that point the slave device detects the request: it will interrupt and **reset the TX FIFO!** So data will be lost. The slave then has 10ms to retrieve any data into the RX FIFO and acknowledge the request: **after the acknowledge the RX FIFO will be resetted!** The acknowledge can be done by setting the `IACK` bit into the `ISR` register. 
+  Once the device (both master and slave) detects that a configuration process is happening they will reset the `CDONE` bit in the `CTR` register.
+  
+  At this point the hardware will completely take care of the process (see [configuration Protocol](#configuration-protocol) and [main Controller](#main-controller)). Once the configuration process ended, the `CDONE` bit will be setted, so after a configuration, that bit should be polled before sending any data.  
 
   ### Enable configuration request
 
