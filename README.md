@@ -366,7 +366,7 @@ Once the device (both master and slave) detects that a configuration process is 
   
 At this point, the hardware will completely take care of the process (see [configuration Protocol](#configuration-protocol) and [main Controller](#main-controller)). Once the configuration process ended, the `CDONE` bit will be setted, so after a configuration, that bit should be polled before sending any data.  
 
-  ### Enable configuration request
+### Enable configuration request
 
 The programmer can choose between **two configuration modes** by setting or clearing the `ENREQ` bit in the `CTR` register. 
   
