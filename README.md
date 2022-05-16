@@ -361,11 +361,14 @@ If the programmer wants the device to interrupt when it receives a fixed amount 
 To enable correct communication between two devices, those must agree on four different configuration parameters: *baud rate*, *data width*, *parity mode* and *stop bits number*.
 This protocol focus on the configuration of the last three parameter. To start a configuration process, the programmer must ensure that **both TX and RX FIFOs are empty**, then simply write in the `STR` register a different configuration, once the hardware detects a change in the parameters, it becomes the master and sends three `SYN` characters. Once the transmission is ended, it sends the request (TX low for 1ms). 
   
+  
 At that point, the slave device detects the request: it will interrupt and **reset the TX FIFO!** So data will be lost. The slave then has 10ms to retrieve any data into the RX FIFO and acknowledge the request: **after the acknowledgment, the RX FIFO will be reset!** The acknowledgment can be done by setting the `IACK` bit into the `ISR` register. 
 Once the device (both master and slave) detects that a configuration process is happening, they will reset the `CDONE` bit in the `CTR` register.
   
+  
 At this point, the hardware will completely take care of the process (see [configuration Protocol](#configuration-protocol) and [main Controller](#main-controller)). Once the configuration process ended, the `CDONE` bit will be setted, so after a configuration, that bit should be polled before sending any data.  
 
+  
 ### Enable configuration request
 
 The programmer can choose between **two configuration modes** by setting or clearing the `ENREQ` bit in the `CTR` register. 
