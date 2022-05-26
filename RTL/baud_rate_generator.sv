@@ -40,40 +40,34 @@
 // ------------------------------------------------------------------------------------
 // KEYWORDS : 
 // ------------------------------------------------------------------------------------
-// DEPENDENCIES :  
-// ------------------------------------------------------------------------------------
-// PARAMETERS
-// PARAM NAME : RANGE : DESCRIPTION            : DEFAULT 
-// DVSR_WIDTH :   /   : Divisor number of bits : 32
-// ------------------------------------------------------------------------------------
 
 module baud_rate_generator (
-  input  logic                    clk_i,
-  input  logic                    rst_n_i,
-  input  logic [15:0] divisor_i,
+    input  logic                    clk_i,
+    input  logic                    rst_n_i,
+    input  logic [15:0]             divisor_i,
 
-  output logic                    ov_baud_rt_o 
+    output logic                    ov_baud_rt_o 
 );
 
 //----------//
 // DATAPATH //
 //----------//
 
-  /* Counter for oversampling */
-  logic [15:0] counter_ov;
+    /* Counter for oversampling */
+    logic [15:0] counter_ov;
 
-      /* Counter that ticks 16 times the baudrate */
-      always_ff @(posedge clk_i) begin : counter_16_br
-        if (!rst_n_i) begin 
-          counter_ov <= 'b0; 
-        end else begin  
-          /* Reset if the counter reach the divisor value */
-          counter_ov <= (counter_ov == divisor_i) ? 'b0 : counter_ov + 1'b1;
-        end
-      end : counter_16_br
+        /* Counter that ticks 16 times the baudrate */
+        always_ff @(posedge clk_i) begin : counter_16_br
+            if (!rst_n_i) begin 
+                counter_ov <= 16'b0; 
+            end else begin  
+                /* Reset if the counter reach the divisor value */
+                counter_ov <= (counter_ov == divisor_i) ? 16'b0 : counter_ov + 1'b1;
+            end
+        end : counter_16_br
 
-  /* The counter counts from 0 to divisor value so it actually counts divisor + 1 times
-   * thus the clock generated should tick only when it reach the value 1 */
-  assign ov_baud_rt_o = (counter_ov == 1);
+    /* The counter counts from 0 to divisor value so it actually counts divisor + 1 times
+     * thus the clock generated should tick only when it reach the value 1 */
+    assign ov_baud_rt_o = (counter_ov == 1);
   
 endmodule

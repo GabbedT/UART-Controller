@@ -31,31 +31,31 @@
 // ------------------------------------------------------------------------------------
 
 module edge_detector #(
-  /* 
-   * 1 = Positive Edge
-   * 0 = Negative Edge 
-   */
-  parameter EDGE = 1
+    /* 
+    * 1 = Positive Edge
+    * 0 = Negative Edge 
+    */
+    parameter EDGE = 1
 ) (
-  input  logic clk_i,
-  input  logic signal_i,
+    input  logic clk_i,
+    input  logic signal_i,
 
-  output logic edge_pulse_o
+    output logic edge_pulse_o
 );
 
-  /* Memorize the signal value of the previous clock cycle */
-  logic signal_dly;
+    /* Memorize the signal value of the previous clock cycle */
+    logic signal_dly;
 
-      always_ff @(posedge clk_i) begin : delay 
-        signal_dly <= signal_i;
-      end : delay
-  
-  if (EDGE) begin
-    /* Detect positive edge */
-    assign edge_pulse_o = signal_i & (!signal_dly);
-  end else begin 
-    /* Detect negative edge */
-    assign edge_pulse_o = (!signal_i) & signal_dly;
-  end
+        always_ff @(posedge clk_i) begin : delay 
+            signal_dly <= signal_i;
+        end : delay
+    
+    if (EDGE) begin
+        /* Detect positive edge */
+        assign edge_pulse_o = signal_i & (!signal_dly);
+    end else begin 
+        /* Detect negative edge */
+        assign edge_pulse_o = (!signal_i) & signal_dly;
+    end
 
 endmodule : edge_detector
