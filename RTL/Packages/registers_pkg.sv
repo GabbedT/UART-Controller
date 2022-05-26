@@ -3,6 +3,16 @@
 
 package registers_pkg;
 
+  /* Registers addresses */
+  localparam STR_ADDR  = 0;
+  localparam LDVR_ADDR = 1;
+  localparam UDVR_ADDR = 2;
+  localparam FSR_ADDR  = 3;
+  localparam CTR_ADDR  = 4;
+  localparam ISR_ADDR  = 5;
+  localparam RXR_ADDR  = 6;
+  localparam TXR_ADDR  = 7;
+
   /* Enable registers typedef */
   typedef struct packed {
     logic TXR;
@@ -45,12 +55,12 @@ package registers_pkg;
 
   typedef struct packed {
     logic       RESERVED;
+    logic       INTPEND;
     logic [1:0] COM;
     logic       ENREQ;
     logic       CDONE;
     logic       AKREQ;
     logic       STDC;
-    logic       SREQ;
   } CTR_data_t;
 
 
@@ -66,6 +76,40 @@ package registers_pkg;
     logic [2:0] INTID;
     logic       IACK;
   } ISR_data_t;
+
+
+//------------------------//
+//  TESTBENCH OPERATIONS  //
+//------------------------//
+
+  typedef enum int {
+    /* Read STR */
+    READ_CONFIG,
+
+    /* Set RX threshold */
+    SET_THRESHOLD,
+
+    /* Set communication mode */
+    SET_COM_MODE,
+
+    /* Enable or disable configurations requests */
+    ENABLE_CONFIG_REQ,
+
+    /* Random enable interrupt */
+    ENABLE_INTERRUPT,
+
+    /* Read RXR */
+    READ_DATA,
+
+    /* Write TXR */
+    SEND_DATA,
+
+    /* Send a burst of data */
+    SEND_DATA_BURST,
+
+    /* Do nothing */
+    NO_OPERATION
+  } operation_t;
 
 endpackage : registers_pkg
 

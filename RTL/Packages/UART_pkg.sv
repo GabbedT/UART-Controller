@@ -91,14 +91,14 @@ package UART_pkg;
 //-----------------//
 
   /* Interrupt id */
-  localparam INT_TX_DONE     = 3'b000;
-  localparam INT_CONFIG_FAIL = 3'b001;
-  localparam INT_OVERRUN     = 3'b010;
-  localparam INT_FRAME       = 3'b011;
-  localparam INT_PARITY      = 3'b100;
-  localparam INT_RXD_RDY     = 3'b101;
-  localparam INT_RX_FULL     = 3'b110;
-  localparam INT_CONFIG_REQ  = 3'b111;
+  localparam INT_CONFIG_FAIL = 3'b000;
+  localparam INT_OVERRUN     = 3'b001;
+  localparam INT_FRAME       = 3'b010;
+  localparam INT_PARITY      = 3'b011;
+  localparam INT_RXD_RDY     = 3'b100;
+  localparam INT_RX_FULL     = 3'b101;
+  localparam INT_CONFIG_REQ  = 3'b110;
+  localparam INT_TX_DONE     = 3'b111;
 
 
 //----------------------//
@@ -140,6 +140,18 @@ package UART_pkg;
   localparam STD_BAUD_RATE = 9600;
 
   localparam STD_DIVISOR = int'((SYSTEM_CLOCK_FREQ / (16 * STD_BAUD_RATE)) - 1);
+
+
+//----------------------//
+//  MODULES PARAMETERS  //
+//----------------------//
+
+  /* How many clock cycles does it need to reach 1 ms */ 
+  /* based on a specific system clock */
+  localparam COUNT_1MS = SYSTEM_CLOCK_FREQ / 1000;
+
+  localparam READ = 1;
+  localparam WRITE = 0;
 
 endpackage : UART_pkg
 
