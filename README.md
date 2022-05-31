@@ -361,14 +361,11 @@ If the programmer wants the device to interrupt when it receives a fixed amount 
 To enable correct communication between two devices, those must agree on four different configuration parameters: *baud rate*, *data width*, *parity mode* and *stop bits number*.
 This protocol focus on the configuration of the last three parameter. To start a configuration process, the programmer must ensure that **both TX and RX FIFOs are empty**, then simply write in the `STR` register a different configuration, once the hardware detects a change in the parameters, it becomes the master and sends three `SYN` characters. Once the transmission is ended, it sends the request (TX low for 1ms). 
   
-  
 At that point, the slave device detects the request: it will interrupt and **reset the TX FIFO!** So data will be lost. The slave then has 10ms to retrieve any data into the RX FIFO and acknowledge the request: **after the acknowledgment, the RX FIFO will be reset!** The acknowledgment can be done by setting the `IACK` bit into the `ISR` register. 
 Once the device (both master and slave) detects that a configuration process is happening, they will reset the `CDONE` bit in the `CTR` register.
   
-  
 At this point, the hardware will completely take care of the process (see [configuration Protocol](#configuration-protocol) and [main Controller](#main-controller)). Once the configuration process ended, the `CDONE` bit will be setted, so after a configuration, that bit should be polled before sending any data.  
 
-  
 ### Enable configuration request
 
 The programmer can choose between **two configuration modes** by setting or clearing the `ENREQ` bit in the `CTR` register. 
@@ -381,12 +378,16 @@ The programmer can enable or disable the **data stream mode** by setting or clea
 
 If the data stream mode is **disabled**, once the transmission of a packet of data ended, the device will interrupt. If the programmer wants to send a stream of data, interrupting every time a packet is sent would slow the processor. **Data stream mode** can be enabled in this case: the processor will usually write a burst of data into the `TX FIFO`, then continue its task. The UART will transmit all the data until the FIFO will be **empty**, at this point the device will interrupt.
 
+Note that the user can still write data consecutively (storing it into the FIFO) even if `TDSM` is disabled, this settings works only at the interrupt level.
+
   ### Receiver Data Stream Mode
 
 The programmer can enable or disable the **data stream mode** by setting or clearing the `RDSM` bit in the `STR` register.
   
 If the data stream mode is not enabled, the device will
 interrupt every time a new packet is received. If enabled, the device will interrupt when the number of packet received equals the `RX THRESHOLD` value, if the value is set to zero, then the device will interrupt when the FIFO is full.
+
+Note that the device can still receive multiple bytes of data without losing it (storing it into the FIFO) even if `RDSM` is disabled, his settings works only at the interrupt level.
 
   ## Transmission
 
