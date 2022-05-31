@@ -119,7 +119,7 @@ package UART_pkg;
 //----------------------//
 
   /* System clock frequency in Hz */
-  localparam SYSTEM_CLOCK_FREQ = 100_000_000;
+  localparam SYSTEM_CLOCK_FREQ = 50_000_000;
 
   /* Number of words stored in the buffers */
   localparam TX_FIFO_DEPTH = 64;
