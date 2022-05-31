@@ -66,7 +66,7 @@ module receiver (
     output logic         rx_done_o,
     output logic         rxd_rdy_o,
     output logic [7:0]   data_rx_o,
-    output logic         rx_idle
+    output logic         rx_idle_o
 );
 
 //--------------//
@@ -199,7 +199,7 @@ module receiver (
         always_ff @(posedge clk_i) begin : data_ready_interrupt_reg
             if (!rst_n_i) begin 
                 rx_rdy_int[CRT] <= 1'b0;
-            end if (!rx_data_stream_mode_i & fifo_if.read_i) begin 
+            end else if (!rx_data_stream_mode_i & fifo_if.read_i) begin 
                 /* Clear when reading data */
                 rx_rdy_int[CRT] <= 1'b0;
             end else if (rx_data_stream_mode_i & fifo_if.empty_o) begin 
@@ -239,7 +239,7 @@ module receiver (
         always_ff @(posedge clk_i) begin : fsm_state_register
             if (!rst_n_i) begin 
                 state[CRT] <= RX_IDLE;
-            end else if (fifo_rst_n) begin 
+            end else if (!fifo_rst_n) begin 
                 state[CRT] <= RX_IDLE;
             end else begin 
                 state[CRT] <= state[NXT];
@@ -265,17 +265,9 @@ module receiver (
             bits_processed[NXT] = bits_processed[CRT];
 
             rx_done_o = 1'b0;
-            rx_idle = 1'b0;
+            rx_idle_o = 1'b0;
             fifo_if.write_i = 1'b0;
             fifo_rst_n = 1'b1;
-
-            if (counter_10ms[CRT] == COUNT_1MS) begin 
-                cfg_req[NXT] = 1'b1;
-                state[NXT] = RX_IDLE;
-                
-                /* Reset fifo only if the request is acknowledged */
-                fifo_rst_n = !req_ackn_i;
-            end 
 
             case (state[CRT])
 
@@ -285,7 +277,7 @@ module receiver (
                 RX_IDLE: begin 
                     stop_bits_cnt[NXT] = 1'b0;
                     stop_bits[NXT] = 1'b0;
-                    rx_idle = 1'b1;
+                    rx_idle_o = 1'b1;
 
                     if ((rx_i != RX_LINE_IDLE) & enable) begin 
                         counter_16br[NXT] = 4'b0;
@@ -310,6 +302,9 @@ module receiver (
                     if (counter_10ms[CRT] == COUNT_1MS) begin 
                         cfg_req[NXT] = 1'b1;
                         state[NXT] = RX_IDLE;
+
+                        /* Reset fifo only if the request is acknowledged */
+                        fifo_rst_n = !req_ackn_i;
                     end
                 end
 

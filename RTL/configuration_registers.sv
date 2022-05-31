@@ -29,7 +29,7 @@ module configuration_registers (
     input  logic        tx_idle,
     input  logic        rx_idle,
     output logic [15:0] divisor_o,
-    output logic        reset_bd_gen,
+    output logic        reset_bd_gen_o,
 
     /* FSR */
     input  logic        tx_fifo_full_i,
@@ -129,51 +129,22 @@ module configuration_registers (
     assign parity_mode_o = parity_mode;
     assign stop_bits_o = stop_bits;
 
-
+    
+    // TODO CHANGE THIS: DATA_IO IS HIGH IMPEDANCE
     logic change_config;
-    assign change_config = ((STR_data.DWID != data_io[1:0]) | (STR_data.PMID != data_io[3:2]) | (STR_data.SBID != data_io[5:4]));
+    assign change_config = ((STR_data.DWID != data_width) | (STR_data.PMID != parity_mode) | (STR_data.SBID != stop_bits);
 
-    assign send_config_req_o = change_config & (address_i == STR_ADDR) & write_i;
+    assign send_config_req_o = change_config & write_i;
 
 
 //----------------//
 //  DVR REGISTER  //
 //----------------//
 
-    /* 
-    *  While the divisor value must be written in at least two clock cycles
-    *  because there are 8 data pins while the divisor value is 16 bits, 
-    *  the value must be delivered to the baud rate generator in a single
-    *  clock cycle. 
-    */
-
     localparam LOWER = 0;
     localparam UPPER = 1;
 
     logic [UPPER:LOWER][7:0] DVR_data;
-    logic [15:0]             old_DVR_data;
-    logic                    DVR_done;
-    logic [2:0]              old_address;
-        
-        /* Memorize the last address */
-        always_ff @(posedge clk_i) begin 
-            if (!rst_n_i) begin
-                old_address <= 3'b0;
-            end else begin
-                old_address <= address_i;
-            end
-        end
-
-    assign DVR_done = (old_address == LDVR_ADDR) & (address_i == UDVR_ADDR);
-    assign reset_bd_gen = (old_address == LDVR_ADDR) & (address_i == UDVR_ADDR);
-
-        always_ff @(posedge clk_i) begin 
-            if (!rst_n_i) begin
-                old_DVR_data <= STD_DIVISOR;
-            end else if (DVR_done) begin
-                old_DVR_data <= DVR_data;
-            end
-        end
 
         always_ff @(posedge clk_i) begin : DVR_WR
             if (!rst_n_i) begin 
@@ -185,7 +156,39 @@ module configuration_registers (
             end
         end : DVR_WR
 
-    assign divisor_o = (tx_idle & rx_idle) ? old_DVR_data : DVR_data;
+
+    /* 
+     *  While the divisor value must be written in at least two clock cycles
+     *  because there are 8 data pins while the divisor value is 16 bits, 
+     *  the value must be delivered to the baud rate generator in a single
+     *  clock cycle. 
+     */
+
+    logic [15:0]             divisor_bdgen;
+    logic                    DVR_done;
+    logic [1:0][2:0]         old_address;
+        
+        /* Shift register that record the last two address */
+        always_ff @(posedge clk_i) begin
+            if (!rst_n_i) begin
+                old_address <= 3'b0;
+            end else begin
+                old_address <= {old_address[0], address_i};
+            end
+        end
+
+    assign DVR_done = (old_address[1] == LDVR_ADDR) & (old_address[0] == UDVR_ADDR);
+    assign reset_bd_gen_o = DVR_done;
+
+        always_ff @(posedge clk_i) begin 
+            if (!rst_n_i) begin
+                divisor_bdgen <= STD_DIVISOR;
+            end else if (DVR_done) begin
+                divisor_bdgen <= DVR_data;
+            end
+        end
+
+    assign divisor_o = (tx_idle & rx_idle) ? divisor_bdgen : DVR_data;
 
 
 //----------------//
@@ -337,8 +340,21 @@ module configuration_registers (
             end
         end
 
+    /* Flop the write signal so that it arrives to the 
+     * transmitter at the same time of the data (which
+     * is also registred) */
+    logic write_ff;
+
+        always_ff @(posedge clk_i) begin 
+            if (!rst_n_i) begin
+                write_ff <= 1'b0;
+            end else begin
+                write_ff <= write_i;
+            end
+        end
+
     assign tx_data_o = TXR_data;
-    assign tx_fifo_write_o = (write_i & (address_i == TXR_ADDR));
+    assign tx_fifo_write_o = (write_ff & (address_i == TXR_ADDR));
 
 
 //-----------//

@@ -35,11 +35,12 @@ module uart (
         .edge_pulse_o ( read    )
     );
 
-    edge_detector #(0) negedge_write_det (
+    edge_detector #(1) posedge_write_det (
         .clk_i        ( clk_i    ),
         .signal_i     ( write_cs ),
         .edge_pulse_o ( write    )
     );
+
 
 //-----------------------//
 //  BAUD RATE GENERATOR  //
@@ -47,13 +48,13 @@ module uart (
 
     logic [15:0] divisor;
     logic        baud_rate_tick;
-    logic        reset, reset_bd_gen;
+    logic        reset_bd_n, reset_bd_gen;
 
-    assign reset = reset_bd_gen | rst_n_i;
+    assign reset_bd_n = !reset_bd_gen & rst_n_i;
 
     baud_rate_generator baud_rate_gen (
         .clk_i        ( clk_i          ),
-        .rst_n_i      ( reset          ),
+        .rst_n_i      ( reset_bd_n     ),
         .divisor_i    ( divisor        ),
         .ov_baud_rt_o ( baud_rate_tick )
     );
@@ -95,7 +96,7 @@ module uart (
     logic       tx_data_stream_mode_i, tx_data_stream_mode_o;
     logic       tx_enable;
 
-    main_controller u_main_controller (
+    main_controller main_controller_unit (
         .rst_n_i                 ( rst_n_i               ),
         .clk_i                   ( clk_i                 ),
         .interrupt_ackn_i        ( interrupt_ackn        ),
@@ -166,7 +167,7 @@ module uart (
         .req_done_o            ( req_done              ),
         .tx_fifo_empty_o       ( tx_fifo_empty         ),
         .tx_fifo_full_o        ( tx_fifo_full          ),
-        .tx_idle               ( tx_idle               )
+        .tx_idle_o             ( tx_idle               )
     );
 
 
@@ -188,7 +189,7 @@ module uart (
         .ov_baud_rt_i          ( baud_rate_tick        ),
         .rx_i                  ( rx_i                  ),
         .rx_fifo_read_i        ( rx_fifo_read_o        ),
-        .req_ackn_i            ( req_ackn_o            ),
+        .req_ackn_i            ( req_ackn              ),
         .threshold_i           ( threshold             ),
         .rx_data_stream_mode_i ( rx_data_stream_mode_o ),
         .data_width_i          ( data_width            ),
@@ -203,7 +204,7 @@ module uart (
         .rx_done_o             ( rx_done               ),
         .rxd_rdy_o             ( rxd_rdy               ),
         .data_rx_o             ( data_rx               ),
-        .rx_idle               ( rx_idle               )
+        .rx_idle_o             ( rx_idle               )
     );
 
 
@@ -216,10 +217,9 @@ module uart (
     logic       parity_error_en;
     logic       rx_rdy_en;
     logic       int_ackn;
-    logic       config_ackn;
-    logic       read_rx_data;
     logic [2:0] interrupt_id;
     logic       enable_int_id;
+    logic       int_pending;
 
     interrupt_arbiter arbiter (
         .clk_i                 ( clk_i                 ),
@@ -238,13 +238,15 @@ module uart (
         .parity_error_en_i     ( parity_error_en       ),
         .rx_rdy_en_i           ( rx_rdy_en             ),
         .int_ackn_i            ( int_ackn              ),
-        .config_ackn_i         ( config_ackn           ),
-        .read_rx_data_i        ( read_rx_data          ),
+        .config_ackn_i         ( req_ackn              ),
+        .read_rx_data_i        ( rx_fifo_read_i        ),
         .rx_fifo_empty_i       ( rx_fifo_empty         ),
         .interrupt_vector_o    ( interrupt_id          ),
         .enable_int_vec_o      ( enable_int_id         ),
-        .ireq_n_o              ( ireq_n_o              )
+        .ireq_n_o              ( int_pending           )
     );
+
+    assign ireq_n_o = int_pending;
 
 
 //-------------//
@@ -274,11 +276,12 @@ module uart (
         .tx_idle                 ( tx_idle                      ),
         .rx_idle                 ( rx_idle                      ),
         .divisor_o               ( divisor                      ),
-        .reset_bd_gen            ( reset_bd_gen                 ),
+        .reset_bd_gen_o          ( reset_bd_gen                 ),
         .tx_fifo_full_i          ( tx_fifo_full                 ),
         .rx_fifo_empty_i         ( rx_fifo_empty                ),
         .rx_fifo_threshold_o     ( threshold                    ),
         .config_done_i           ( config_done                  ),
+        .int_pend_i              ( !int_pending                 ),
         .communication_mode_o    ( communication_mode_i         ),
         .enable_config_o         ( enable_config_receive        ),
         .ack_request_o           ( req_ackn                     ),
@@ -292,7 +295,7 @@ module uart (
         .overrun_error_en_o      ( overrun_error_en             ),
         .int_ackn_o              ( int_ackn                     ),
         .rx_data_i               ( data_rx                      ),
-        .rx_fifo_read_o          ( rx_fifo_read                 ),
+        .rx_fifo_read_o          ( rx_fifo_read_i               ),
         .tx_data_o               ( data_tx_i                    ),
         .tx_fifo_write_o         ( tx_fifo_write_i              )
     );

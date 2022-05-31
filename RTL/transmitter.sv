@@ -60,7 +60,7 @@ module transmitter (
     output logic         req_done_o,
     output logic         tx_fifo_empty_o,
     output logic         tx_fifo_full_o,
-    output logic         tx_idle
+    output logic         tx_idle_o
 );
 
 //-----------//
@@ -112,7 +112,7 @@ module transmitter (
                 counter_br[CRT] <= 4'b0;
                 bits_processed[CRT] <= 3'b0;
                 stop_bits[CRT] <= 1'b0;
-                tx_o <= TX_IDLE;
+                tx_o <= TX_LINE_IDLE;
             end else begin 
                 data_tx[CRT] <= data_tx[NXT];
                 counter_10ms[CRT] <= counter_10ms[NXT];
@@ -155,9 +155,9 @@ module transmitter (
             counter_10ms[NXT] = counter_10ms[CRT];
             bits_processed[NXT] = bits_processed[CRT];
 
-            tx_line = TX_IDLE;
+            tx_line = TX_LINE_IDLE;
             tx_done_o = 1'b0;
-            tx_idle = 1'b0;
+            tx_idle_o = 1'b0;
             fifo_if.read_i = 1'b0;
             req_done_o = 1'b0;
 
@@ -170,7 +170,7 @@ module transmitter (
                  */
                 TX_IDLE: begin 
                     stop_bits[NXT] = 1'b0;
-                    tx_idle = 1'b1;
+                    tx_idle_o = 1'b1;
 
                     if (!fifo_if.empty_o & enable) begin 
                         state[NXT] = TX_START;
