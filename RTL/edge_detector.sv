@@ -46,7 +46,7 @@ module edge_detector #(
     /* Memorize the signal value of the previous clock cycle */
     logic signal_dly;
 
-        always_ff @(posedge clk_i) begin : delay 
+        always_ff @(posedge clk_i or negedge rst_n_i) begin : delay 
             signal_dly <= signal_i;
         end : delay
     

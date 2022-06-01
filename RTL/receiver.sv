@@ -121,32 +121,31 @@ module receiver (
     /* Count the amount of consecuteve SYN character received */
     logic [$clog2(SYN_NUMBER) - 1:0] syn_data_cnt[NXT:CRT];
 
-        always_ff @(posedge clk_i) begin
+        always_ff @(posedge clk_i or negedge rst_n_i) begin
             if (!rst_n_i) begin
-                data_rx[CRT] <= 8'b0;
-                counter_16br[CRT] <= 4'b0;
-                bits_processed[CRT] <= 3'b0;
-                stop_bits_cnt[CRT] <= 1'b0;
-                parity_bit[CRT] <= 1'b0;
-                stop_bits[CRT] <= 1'b1;
                 syn_data_cnt[CRT] <= 2'b0;
             end else begin 
-                data_rx[CRT] <= data_rx[NXT];
-                counter_16br[CRT] <= counter_16br[NXT];
-                bits_processed[CRT] <= bits_processed[NXT];
-                stop_bits_cnt[CRT] <= stop_bits_cnt[NXT];
-                parity_bit[CRT] <= parity_bit[NXT];
-                stop_bits[CRT] <= stop_bits[NXT];
                 syn_data_cnt[CRT] <= syn_data_cnt[NXT];
             end
         end 
+        
+        /* No reset because they are resetted in the FSM combinatorial logic
+         * this saves area */
+        always_ff @(posedge clk_i or negedge rst_n_i) begin : datapath_register
+            data_rx[CRT] <= data_rx[NXT];
+            counter_16br[CRT] <= counter_16br[NXT];
+            bits_processed[CRT] <= bits_processed[NXT];
+            stop_bits_cnt[CRT] <= stop_bits_cnt[NXT];
+            parity_bit[CRT] <= parity_bit[NXT];
+            stop_bits[CRT] <= stop_bits[NXT];
+        end : datapath_register
 
 
     /* Counter to determine the amount of time the RX line 
      * stays low during configuration request */
     logic [$clog2(COUNT_1MS) - 1:0] counter_10ms[NXT:CRT];
 
-        always_ff @(posedge clk_i) begin : ms10_counter
+        always_ff @(posedge clk_i or negedge rst_n_i) begin : ms10_counter
             if (!rst_n_i) begin 
                 counter_10ms[CRT] <= 'b0;
             end else begin
@@ -172,7 +171,7 @@ module receiver (
      * must be set with the value 0. */
     logic [5:0] fifo_size_cnt[NXT:CRT];
 
-        always_ff @(posedge clk_i) begin : fifo_size_counter
+        always_ff @(posedge clk_i or negedge rst_n_i) begin : fifo_size_counter
             if (!rst_n_i) begin 
                 fifo_size_cnt[CRT] <= 'b0;
             end else begin 
@@ -196,7 +195,7 @@ module receiver (
      * or if data is received (in standard mode) */
     logic rx_rdy_int[NXT:CRT];
 
-        always_ff @(posedge clk_i) begin : data_ready_interrupt_reg
+        always_ff @(posedge clk_i or negedge rst_n_i) begin : data_ready_interrupt_reg
             if (!rst_n_i) begin 
                 rx_rdy_int[CRT] <= 1'b0;
             end else if (!rx_data_stream_mode_i & fifo_if.read_i) begin 
@@ -216,7 +215,7 @@ module receiver (
      * deasserted when the request is acknowledged */
     logic cfg_req[NXT:CRT];
 
-        always_ff @(posedge clk_i) begin 
+        always_ff @(posedge clk_i or negedge rst_n_i) begin 
             if (!rst_n_i) begin 
                 cfg_req[CRT] <= 1'b0;
             end else if (req_ackn_i) begin 
@@ -236,7 +235,7 @@ module receiver (
     /* FSM current and next state */
     fsm_pkg::receiver_fsm_e state[NXT:CRT];
 
-        always_ff @(posedge clk_i) begin : fsm_state_register
+        always_ff @(posedge clk_i or negedge rst_n_i) begin : fsm_state_register
             if (!rst_n_i) begin 
                 state[CRT] <= RX_IDLE;
             end else if (!fifo_rst_n) begin 
@@ -259,11 +258,11 @@ module receiver (
             stop_bits[NXT] = stop_bits[CRT];
             parity_bit[NXT] = parity_bit[CRT];
             counter_16br[NXT] = counter_16br[CRT];
-            rx_rdy_int[NXT] = rx_rdy_int[CRT];
             syn_data_cnt[NXT] = syn_data_cnt[CRT];
             stop_bits_cnt[NXT] = stop_bits_cnt[CRT];
             bits_processed[NXT] = bits_processed[CRT];
-
+            
+            rx_rdy_int[NXT] = 1'b0;
             rx_done_o = 1'b0;
             rx_idle_o = 1'b0;
             fifo_if.write_i = 1'b0;
@@ -277,10 +276,14 @@ module receiver (
                 RX_IDLE: begin 
                     stop_bits_cnt[NXT] = 1'b0;
                     stop_bits[NXT] = 1'b0;
+                    bits_processed[NXT] = 3'b0;
+                    counter_16br[NXT] = 4'b0;
+                    parity_bit[NXT] = 1'b0;
+                    data_rx[NXT] = 8'b0;
+
                     rx_idle_o = 1'b1;
 
                     if ((rx_i != RX_LINE_IDLE) & enable) begin 
-                        counter_16br[NXT] = 4'b0;
                         state[NXT] = (syn_data_cnt[CRT] == SYN_NUMBER) ? RX_CONFIG_REQ : RX_START;
                     end
                 end
@@ -316,7 +319,6 @@ module receiver (
                     if (ov_baud_rt_i) begin 
                         /* Reach the middle of the bit */
                         if (counter_16br[CRT] == 4'd7) begin 
-                            bits_processed[NXT] = 3'b0;
                             counter_16br[NXT] = 4'b0;
                             state[NXT] = RX_SAMPLE;
                         end else begin 

@@ -13,6 +13,12 @@ module uart (
     output logic       ireq_n_o
 );
 
+//----------------//
+//  SYNCRONIZERS  //
+//----------------//
+
+
+
 //---------------------//
 //  POSEDGE DETECTORS  //
 //---------------------//
@@ -285,7 +291,7 @@ module uart (
         .communication_mode_o    ( communication_mode_i         ),
         .enable_config_o         ( enable_config_receive        ),
         .ack_request_o           ( req_ackn                     ),
-        .set_std_config_o        ( set_std_config               ),
+        .set_std_config_o        ( set_std_config_i             ),
         .send_config_req_o       ( config_req_mst_i             ),
         .interrupt_id_i          ( interrupt_id                 ),
         .interrupt_id_en_i       ( enable_int_id                ),

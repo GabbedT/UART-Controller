@@ -57,7 +57,7 @@ module baud_rate_generator (
     logic [15:0] counter_ov;
 
         /* Counter that ticks 16 times the baudrate */
-        always_ff @(posedge clk_i) begin : counter_16_br
+        always_ff @(posedge clk_i or negedge rst_n_i) begin : counter_16_br
             if (!rst_n_i) begin 
                 counter_ov <= 16'b0; 
             end else begin  

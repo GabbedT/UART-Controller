@@ -104,24 +104,16 @@ module transmitter (
     /* Number of data bits sended */
     logic [2:0] bits_processed[NXT:CRT]; 
 
-        /* Register the output to not lose data */
-        always_ff @(posedge clk_i) begin : data_register
-            if (!rst_n_i) begin
-                data_tx[CRT] <= 8'b0;
-                counter_10ms[CRT] <= 'b0;
-                counter_br[CRT] <= 4'b0;
-                bits_processed[CRT] <= 3'b0;
-                stop_bits[CRT] <= 1'b0;
-                tx_o <= TX_LINE_IDLE;
-            end else begin 
-                data_tx[CRT] <= data_tx[NXT];
-                counter_10ms[CRT] <= counter_10ms[NXT];
-                counter_br[CRT] <= counter_br[NXT];
-                bits_processed[CRT] <= bits_processed[NXT];
-                stop_bits[CRT] <= stop_bits[NXT];
-                tx_o <= tx_line;
-            end
-        end : data_register
+        /* No reset because they are resetted in the FSM combinatorial logic
+         * this saves area */
+        always_ff @(posedge clk_i or negedge rst_n_i) begin : datapath_register 
+            data_tx[CRT] <= data_tx[NXT];
+            counter_10ms[CRT] <= counter_10ms[NXT];
+            counter_br[CRT] <= counter_br[NXT];
+            bits_processed[CRT] <= bits_processed[NXT];
+            stop_bits[CRT] <= stop_bits[NXT];
+            tx_o <= tx_line;
+        end : datapath_register
 
 
 //-------------//
@@ -131,7 +123,7 @@ module transmitter (
     /* FSM current and next state */
     fsm_pkg::transmitter_fsm_e state[NXT:CRT];
 
-        always_ff @(posedge clk_i) begin : fsm_state_register
+        always_ff @(posedge clk_i or negedge rst_n_i) begin : fsm_state_register
             if (!rst_n_i) begin 
                 state[CRT] <= TX_IDLE;
             end else if (config_req_slv_i) begin 
@@ -152,9 +144,9 @@ module transmitter (
             data_tx[NXT] = data_tx[CRT];
             stop_bits[NXT] = stop_bits[CRT];
             counter_br[NXT] = counter_br[CRT];
-            counter_10ms[NXT] = counter_10ms[CRT];
             bits_processed[NXT] = bits_processed[CRT];
-
+            
+            counter_10ms[NXT] = 'b0;
             tx_line = TX_LINE_IDLE;
             tx_done_o = 1'b0;
             tx_idle_o = 1'b0;
@@ -169,7 +161,11 @@ module transmitter (
                  *  buffer by transmitting all the data, then send the request.
                  */
                 TX_IDLE: begin 
+                    data_tx[NXT] = 8'b0;
                     stop_bits[NXT] = 1'b0;
+                    counter_br[NXT] = 4'b0;
+                    bits_processed[NXT] = 3'b0;
+
                     tx_idle_o = 1'b1;
 
                     if (!fifo_if.empty_o & enable) begin 

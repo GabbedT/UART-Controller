@@ -105,7 +105,7 @@ module main_controller (
     /* Counter to 50ms */
     logic [$clog2(COUNT_10MS) - 1:0] counter_50ms[NXT:CRT];
 
-        always_ff @(posedge clk_i) begin : ms50_counter
+        always_ff @(posedge clk_i or negedge rst_n_i) begin : ms50_counter
             if (!rst_n_i) begin   
                 counter_50ms[CRT] <= 'b0;
             end else if (counter_50ms[CRT] == COUNT_10MS) begin  
@@ -132,7 +132,7 @@ module main_controller (
     
         /* Count the number of times the device has tried to reques a configuration
          * and the slave device didn't respond (max 3 times) */
-        always_ff @(posedge clk_i) begin : datapath_register
+        always_ff @(posedge clk_i or negedge rst_n_i) begin : datapath_register
             if (!rst_n_i) begin 
                 config_failed[CRT] <= 'b0;
                 config_packet_type[CRT] <= 'b0;
@@ -151,7 +151,7 @@ module main_controller (
 
     fsm_pkg::main_control_fsm_e state[NXT:CRT];
 
-        always_ff @(posedge clk_i) begin : fsm_state_register
+        always_ff @(posedge clk_i or negedge rst_n_i) begin : fsm_state_register
             if (!rst_n_i) begin 
                 state[CRT] <= MAIN;
             end else begin 
