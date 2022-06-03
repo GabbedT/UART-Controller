@@ -38,6 +38,10 @@
 // KEYWORDS : PARAMETERS, TX FIFO, DATAPATH, FSM LOGIC, ASSERTIONS
 // ------------------------------------------------------------------------------------
 
+`include "Packages/UART_pkg.sv"
+`include "Packages/fsm_pkg.sv"
+`include "sync_FIFO_buffer.sv"
+`include "sync_FIFO_interface.sv"
 
 import UART_pkg::*;
 
@@ -104,16 +108,24 @@ module transmitter (
     /* Number of data bits sended */
     logic [2:0] bits_processed[NXT:CRT]; 
 
-        /* No reset because they are resetted in the FSM combinatorial logic
-         * this saves area */
-        always_ff @(posedge clk_i or negedge rst_n_i) begin : datapath_register 
-            data_tx[CRT] <= data_tx[NXT];
-            counter_10ms[CRT] <= counter_10ms[NXT];
-            counter_br[CRT] <= counter_br[NXT];
-            bits_processed[CRT] <= bits_processed[NXT];
-            stop_bits[CRT] <= stop_bits[NXT];
-            tx_o <= tx_line;
-        end : datapath_register
+        /* Register the output to not lose data */
+        always_ff @(posedge clk_i) begin : data_register
+            if (!rst_n_i) begin
+                data_tx[CRT] <= 8'b0;
+                counter_10ms[CRT] <= 'b0;
+                counter_br[CRT] <= 4'b0;
+                bits_processed[CRT] <= 3'b0;
+                stop_bits[CRT] <= 1'b0;
+                tx_o <= TX_LINE_IDLE;
+            end else begin 
+                data_tx[CRT] <= data_tx[NXT];
+                counter_10ms[CRT] <= counter_10ms[NXT];
+                counter_br[CRT] <= counter_br[NXT];
+                bits_processed[CRT] <= bits_processed[NXT];
+                stop_bits[CRT] <= stop_bits[NXT];
+                tx_o <= tx_line;
+            end
+        end : data_register
 
 
 //-------------//
@@ -123,7 +135,7 @@ module transmitter (
     /* FSM current and next state */
     fsm_pkg::transmitter_fsm_e state[NXT:CRT];
 
-        always_ff @(posedge clk_i or negedge rst_n_i) begin : fsm_state_register
+        always_ff @(posedge clk_i) begin : fsm_state_register
             if (!rst_n_i) begin 
                 state[CRT] <= TX_IDLE;
             end else if (config_req_slv_i) begin 
@@ -144,9 +156,9 @@ module transmitter (
             data_tx[NXT] = data_tx[CRT];
             stop_bits[NXT] = stop_bits[CRT];
             counter_br[NXT] = counter_br[CRT];
+            counter_10ms[NXT] = counter_10ms[CRT];
             bits_processed[NXT] = bits_processed[CRT];
-            
-            counter_10ms[NXT] = 'b0;
+
             tx_line = TX_LINE_IDLE;
             tx_done_o = 1'b0;
             tx_idle_o = 1'b0;
@@ -161,11 +173,7 @@ module transmitter (
                  *  buffer by transmitting all the data, then send the request.
                  */
                 TX_IDLE: begin 
-                    data_tx[NXT] = 8'b0;
                     stop_bits[NXT] = 1'b0;
-                    counter_br[NXT] = 4'b0;
-                    bits_processed[NXT] = 3'b0;
-
                     tx_idle_o = 1'b1;
 
                     if (!fifo_if.empty_o & enable) begin 
@@ -302,54 +310,5 @@ module transmitter (
             endcase
 
       end : fsm_next_state_logic
-
-
-//--------------//
-//  ASSERTIONS  //
-//--------------//
-
-    /* After the device is done transmitting, lower the request signal */
-    property req_done_chk;
-    @(posedge clk_i) req_done_o |=> !config_req_mst_i;
-    endproperty
-
-    /* While sending the request, the tx line must be stable for 10ms */
-    property tx_stable_chk;
-    @(posedge clk_i) ((fifo_if.empty_o) && (state[CRT] == TX_CFG_REQ)) |-> (!tx_o[*COUNT_1MS]);
-    endproperty
-
-    /* Send two stop bits. Tx should be high for 2 clock cycles */
-    property two_stop_bits_chk;
-    @(posedge clk_i) ((state[CRT] == TX_DONE) && (stop_bits_number_i == SB_2BIT)) |=> (tx_o[*2]); 
-    endproperty
-
-    /* The FIFO must not be written if it's full */
-    property full_chk;
-    @(posedge clk_i) fifo_if.full_o |-> !tx_fifo_write_i;
-    endproperty
-
-    /* Read FIFO only in start state */
-    property read_chk;
-    @(posedge clk_i) (state[CRT] != TX_START) |-> !fifo_if.read_i;
-    endproperty
-
-    initial begin 
-    
-        assert property (req_done_chk)
-        else $display("Request done, the request signal wasn't deassert!");
-
-        assert property (tx_stable_chk)
-        else $display("Tx line not stable on low");
-
-        assert property (two_stop_bits_chk)
-        else $display("Error on sending 2 stop bits, tx line must be stable on high for 2 clock cycles");
-
-        assert property (full_chk)
-        else $display("Writing on full FIFO, data lost!");
-
-        assert property (read_chk)
-        else $display("Reading fifo while not sending start bits, data lost!");
-
-    end
 
 endmodule : transmitter

@@ -38,6 +38,10 @@
 //            PRIORITY SELECTOR, INTERRUPT REQUEST, FSM LOGIC
 // ------------------------------------------------------------------------------------
 
+`include "Packages/UART_pkg.sv"
+`include "sync_FIFO_buffer.sv"
+`include "sync_FIFO_interface.sv"
+
 import UART_pkg::*;
 
 module interrupt_arbiter (
@@ -277,7 +281,7 @@ module interrupt_arbiter (
 
     logic irq_n[NXT:CRT];
 
-        always_ff @(posedge clk_i or negedge rst_n_i) begin 
+        always_ff @(posedge clk_i) begin 
             if (!rst_n_i) begin 
                 irq_n[CRT] <= 1'b1;
             end else begin 
@@ -306,7 +310,7 @@ module interrupt_arbiter (
 
     arbiter_fsm_e state[NXT:CRT];
   
-        always_ff @(posedge clk_i or negedge rst_n_i) begin : fsm_state_register
+        always_ff @(posedge clk_i) begin : fsm_state_register
             if (!rst_n_i) begin 
                 state[CRT] <= IDLE;
             end else begin 
@@ -320,7 +324,7 @@ module interrupt_arbiter (
     /* Enable writing vector into ISR register */
     logic enable_int_vec[NXT:CRT];
 
-        always_ff @(posedge clk_i or negedge rst_n_i) begin 
+        always_ff @(posedge clk_i) begin 
             if (!rst_n_i) begin 
                 enable_int_vec[CRT] <= 1'b0;
             end else begin 

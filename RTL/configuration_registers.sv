@@ -1,3 +1,9 @@
+
+`include "Packages/UART_pkg.sv"
+`include "Packages/registers_pkg.sv"
+`include "sync_FIFO_buffer.sv"
+`include "sync_FIFO_interface.sv"
+
 import UART_pkg::*;
 import registers_pkg::*;
 
@@ -77,7 +83,7 @@ module configuration_registers (
 
     STR_data_t STR_data;
 
-        always_ff @(posedge clk_i or negedge rst_n_i) begin : STR_WR
+        always_ff @(posedge clk_i) begin : STR_WR
             if (!rst_n_i) begin 
                 STR_data <= {2'b0, STD_CONFIGURATION};
             end else if (STR_en_i & enable_config_req) begin 
@@ -111,7 +117,7 @@ module configuration_registers (
          * configuration in the register which is used to drive the 
          * modules configuration information. Update the configuration 
          * when the process has ended */
-        always_ff @(posedge clk_i or negedge rst_n_i) begin : config_register
+        always_ff @(posedge clk_i) begin : config_register
             if ((!rst_n_i) | set_std_config_i | std_config) begin
                 data_width <= STD_DATA_WIDTH;
                 parity_mode <= STD_PARITY_MODE;
@@ -146,7 +152,7 @@ module configuration_registers (
 
     logic [UPPER:LOWER][7:0] DVR_data;
 
-        always_ff @(posedge clk_i or negedge rst_n_i) begin : DVR_WR
+        always_ff @(posedge clk_i) begin : DVR_WR
             if (!rst_n_i) begin 
                 DVR_data <= STD_DIVISOR;
             end else if (enable.LDVR) begin 
@@ -169,7 +175,7 @@ module configuration_registers (
     logic [1:0][2:0]         old_address;
         
         /* Shift register that record the last two address */
-        always_ff @(posedge clk_i or negedge rst_n_i) begin
+        always_ff @(posedge clk_i) begin
             if (!rst_n_i) begin
                 old_address <= 3'b0;
             end else begin
@@ -180,7 +186,7 @@ module configuration_registers (
     assign DVR_done = (old_address[1] == LDVR_ADDR) & (old_address[0] == UDVR_ADDR);
     assign reset_bd_gen_o = DVR_done;
 
-        always_ff @(posedge clk_i or negedge rst_n_i) begin 
+        always_ff @(posedge clk_i) begin 
             if (!rst_n_i) begin
                 divisor_bdgen <= STD_DIVISOR;
             end else if (DVR_done) begin
@@ -197,7 +203,7 @@ module configuration_registers (
 
     FSR_data_t FSR_data;
 
-        always_ff @(posedge clk_i or negedge rst_n_i) begin : FSR_WR
+        always_ff @(posedge clk_i) begin : FSR_WR
             if (!rst_n_i) begin 
                 FSR_data.RX_TRESHOLD <= 6'b0;
             end else if (enable.FSR) begin 
@@ -205,7 +211,7 @@ module configuration_registers (
             end  
         end : FSR_WR
 
-        always_ff @(posedge clk_i or negedge rst_n_i) begin : FSR_R
+        always_ff @(posedge clk_i) begin : FSR_R
             if (!rst_n_i) begin
                 FSR_data.TXF <= 1'b0;
                 FSR_data.RXE <= 1'b1;
@@ -226,7 +232,7 @@ module configuration_registers (
 
     logic akn_request, set_std_config, send_config_req;
 
-        always_ff @(posedge clk_i or negedge rst_n_i) begin : CTR_WR
+        always_ff @(posedge clk_i) begin : CTR_WR
             if (!rst_n_i) begin 
                 CTR_data.RESERVED <= 1'b0;
                 CTR_data.COM   <= STD_COMM_MODE;
@@ -243,7 +249,7 @@ module configuration_registers (
 
     assign std_config = CTR_data.STDC;
 
-        always_ff @(posedge clk_i or negedge rst_n_i) begin : CTR_R
+        always_ff @(posedge clk_i) begin : CTR_R
             if (!rst_n_i) begin 
                 CTR_data.CDONE <= 1'b1;
                 CTR_data.INTPEND <= 1'b0;
@@ -277,7 +283,7 @@ module configuration_registers (
 
     ISR_data_t ISR_data;
 
-        always_ff @(posedge clk_i or negedge rst_n_i) begin : ISR_WR
+        always_ff @(posedge clk_i) begin : ISR_WR
             if (!rst_n_i) begin 
                 ISR_data.RXRDY <= 1'b1;
                 ISR_data.FRM   <= 1'b1;
@@ -293,7 +299,7 @@ module configuration_registers (
             end
         end : ISR_WR
 
-        always_ff @(posedge clk_i or negedge rst_n_i) begin : ISR_R
+        always_ff @(posedge clk_i) begin : ISR_R
             if (!rst_n_i) begin 
                 ISR_data.INTID <= 3'b0;
             end else if (interrupt_id_en_i) begin 
@@ -314,7 +320,7 @@ module configuration_registers (
 
     logic [7:0] RXR_data;
 
-        always_ff @(posedge clk_i or negedge rst_n_i) begin : RXR_WR
+        always_ff @(posedge clk_i) begin : RXR_WR
             if (!rst_n_i) begin
                 RXR_data <= 8'b0;
             end else begin
@@ -332,7 +338,7 @@ module configuration_registers (
 
     logic [7:0] TXR_data;
 
-        always_ff @(posedge clk_i or negedge rst_n_i) begin 
+        always_ff @(posedge clk_i) begin 
             if (!rst_n_i) begin
                 TXR_data <= 8'b0;
             end else if (enable.TXR) begin
@@ -345,7 +351,7 @@ module configuration_registers (
      * is also registred) */
     logic write_ff;
 
-        always_ff @(posedge clk_i or negedge rst_n_i) begin 
+        always_ff @(posedge clk_i) begin 
             if (!rst_n_i) begin
                 write_ff <= 1'b0;
             end else begin
