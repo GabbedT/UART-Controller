@@ -36,6 +36,7 @@
 //               "empty_o" is true and the "write_i" signal mustn't be asserted when the
 //               signal "full_o" is true. Note that empty/full signal are asserted 
 //               immediatly as the control signal arrives, not in the next clock cycle!
+//               This file can be found on: https://github.com/GabbedT/FIFO
 // ------------------------------------------------------------------------------------
 // KEYWORDS : FWFT_configuration, standard_configuration, status_register, 
 //            next_state_logic
