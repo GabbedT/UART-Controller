@@ -29,6 +29,7 @@
 // RELEASE HISTORY
 // VERSION : 1.0 
 // DESCRIPTION : Fifo interface used in testbench and in the design
+//               This file can be found on: https://github.com/GabbedT/FIFO
 // ------------------------------------------------------------------------------------
 // KEYWORDS : 
 // ------------------------------------------------------------------------------------
