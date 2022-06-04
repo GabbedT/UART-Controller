@@ -53,8 +53,6 @@
 `ifndef SYNC_FIFO_BUFFER_INCLUDE 
     `define SYNC_FIFO_BUFFER_INCLUDE
 
-`include "sync_FIFO_interface.sv"
-
 module sync_FIFO_buffer #(
 
     parameter DATA_WIDTH = 32,
