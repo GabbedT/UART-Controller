@@ -21,46 +21,49 @@
 // SOFTWARE.
 // ------------------------------------------------------------------------------------
 // ------------------------------------------------------------------------------------
-// FILE NAME : edge_detector.sv
+// FILE NAME : sync_fifo_interface.sv
+// DEPARTMENT : 
 // AUTHOR : Gabriele Tripi
 // AUTHOR'S EMAIL : tripi.gabriele2002@gmail.com
 // ------------------------------------------------------------------------------------
 // RELEASE HISTORY
 // VERSION : 1.0 
-// DESCRIPTION : Edge detector module   
+// DESCRIPTION : Fifo interface used in testbench and in the design
+// ------------------------------------------------------------------------------------
+// KEYWORDS : 
+// ------------------------------------------------------------------------------------
+// DEPENDENCIES: 
+// ------------------------------------------------------------------------------------
+// PARAMETERS
+//
+// PARAM NAME : RANGE : DESCRIPTION                 : DEFAULT
+// ------------------------------------------------------------------------------------
+// DATA_WIDTH :   /   : I/O number of bits          : 32
 // ------------------------------------------------------------------------------------
 
-`ifndef EDGE_DETECTOR_INCLUDE 
-    `define EDGE_DETECTOR_INCLUDE
+`ifndef FIFO_INTERFACE_SV
+    `define FIFO_INTERFACE_SV
 
-module edge_detector #(
-    /* 
-    * 1 = Positive Edge
-    * 0 = Negative Edge 
-    */
-    parameter EDGE = 1
-) (
-    input  logic clk_i,
-    input  logic signal_i,
+`timescale 1ns/1ps
 
-    output logic edge_pulse_o
-);
+interface sync_fifo_interface #(parameter int DATA_WIDTH = 32) (input logic clk_i);
 
-    /* Memorize the signal value of the previous clock cycle */
-    logic signal_dly;
+    /* Inputs */
+    logic [DATA_WIDTH - 1:0] wr_data_i;
+    logic                    read_i;
+    logic                    write_i;
+    logic                    rst_n_i;
 
-        always_ff @(posedge clk_i) begin : delay 
-            signal_dly <= signal_i;
-        end : delay
-    
-    if (EDGE) begin
-        /* Detect positive edge */
-        assign edge_pulse_o = signal_i & (!signal_dly);
-    end else begin 
-        /* Detect negative edge */
-        assign edge_pulse_o = (!signal_i) & signal_dly;
-    end
+    /* Output */
+    logic [DATA_WIDTH - 1:0] rd_data_o;
+    logic                    full_o;
+    logic                    empty_o;
 
-endmodule : edge_detector
+    modport pinout (
+        input  wr_data_i, read_i, write_i, rst_n_i,
+        output rd_data_o, full_o, empty_o
+    ); 
+
+endinterface : sync_fifo_interface
 
 `endif

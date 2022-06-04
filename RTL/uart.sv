@@ -94,7 +94,7 @@ module uart (
     logic       tx_data_stream_mode_i, tx_data_stream_mode_o;
     logic       tx_enable;
 
-    main_controller main_controller_unit (
+    control_unit controller (
         .rst_n_i                 ( rst_n_i               ),
         .clk_i                   ( clk_i                 ),
         .interrupt_ackn_i        ( interrupt_ackn        ),

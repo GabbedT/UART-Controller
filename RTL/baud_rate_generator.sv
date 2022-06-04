@@ -41,6 +41,9 @@
 // KEYWORDS : 
 // ------------------------------------------------------------------------------------
 
+`ifndef BAUD_RATE_GENERATOR_INCLUDE
+    `define BAUD_RATE_GENERATOR_INCLUDE
+
 module baud_rate_generator (
     input  logic                    clk_i,
     input  logic                    rst_n_i,
@@ -70,4 +73,6 @@ module baud_rate_generator (
      * thus the clock generated should tick only when it reach the value 1 */
     assign ov_baud_rt_o = (counter_ov == 1);
   
-endmodule
+endmodule : baud_rate_generator
+
+`endif

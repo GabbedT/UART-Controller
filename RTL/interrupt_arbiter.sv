@@ -38,11 +38,11 @@
 //            PRIORITY SELECTOR, INTERRUPT REQUEST, FSM LOGIC
 // ------------------------------------------------------------------------------------
 
-`include "Packages/UART_pkg.sv"
-`include "sync_FIFO_buffer.sv"
-`include "sync_FIFO_interface.sv"
+`ifndef INTERRUPT_ARBITER_INCLUDE
+    `define INTERRUPT_ARBITER_INCLUDE
 
-import UART_pkg::*;
+`include "Packages/uart_pkg.sv"
+`include "sync_FIFO_buffer.sv"
 
 module interrupt_arbiter (
     input  logic       clk_i,
@@ -507,4 +507,6 @@ module interrupt_arbiter (
 
     assign interrupt_vector_o = interrupt_vector;
 
-endmodule
+endmodule : interrupt_arbiter 
+
+`endif

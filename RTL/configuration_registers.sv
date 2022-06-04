@@ -1,11 +1,8 @@
+`ifndef CONFIGURATION_REGISTERS_INCLUDE
+    `define CONFIGURATION_REGISTERS_INCLUDE
 
-`include "Packages/UART_pkg.sv"
-`include "Packages/registers_pkg.sv"
+`include "Packages/uart_pkg.sv"
 `include "sync_FIFO_buffer.sv"
-`include "sync_FIFO_interface.sv"
-
-import UART_pkg::*;
-import registers_pkg::*;
 
 module configuration_registers (
     input  logic        clk_i,    
@@ -177,7 +174,7 @@ module configuration_registers (
         /* Shift register that record the last two address */
         always_ff @(posedge clk_i) begin
             if (!rst_n_i) begin
-                old_address <= 3'b0;
+                old_address <= 6'b0;
             end else begin
                 old_address <= {old_address[0], address_i};
             end
@@ -405,3 +402,5 @@ module configuration_registers (
     assign data_io = read_i ? data : 8'bZ;
 
 endmodule : configuration_registers
+
+`endif
