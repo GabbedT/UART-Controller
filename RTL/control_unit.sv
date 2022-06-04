@@ -48,19 +48,24 @@ module control_unit (
     input  logic         rst_n_i,
     input  logic         clk_i,
     input  logic         interrupt_ackn_i,
+    
     /* Data */
     input  data_packet_u data_rx_i,
     input  logic [7:0]   data_tx_i,
+    
     /* Transmitter */
     input  logic         tx_done_i,
     input  logic         req_done_i,
+    
     /* Error detection */
-    input  logic         parity_i,    
+    input  logic         parity_i, 
+    
     /* FIFO status */ 
     input  logic         rx_fifo_empty_i,
     input  logic         tx_fifo_empty_i,
     input  logic         rx_fifo_read_i,
     input  logic         tx_fifo_write_i,
+    
     /* Configuration */
     input  logic [1:0]   communication_mode_i,
     input  logic         enable_config_receive_i,
@@ -84,11 +89,15 @@ module control_unit (
     output logic         req_ackn_o,
     output logic         tx_enable_o,
     output logic         rx_enable_o,
+    
     /* FIFO operations */
     output logic         rx_fifo_read_o,
+    
     output logic         tx_fifo_write_o,
+    
     /* Data */
     output logic [7:0]   data_tx_o,
+    
     /* Error */
     output logic         config_error_o,
     output logic         parity_error_o
