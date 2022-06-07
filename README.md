@@ -60,8 +60,9 @@
   | Signal  | Direction | Description |
   | ------- | --------- | ----------- |
   | D0 - D7 | Input / Output | Data bus | 
-  | WR/<ins>WR</ins>      | Input          | Read active high, write active low |
+  | RD/<ins>WR</ins>      | Input          | Read active high, write active low |
   | <ins>CS<ins>          | Input   | Chip select active low, if deasserted the data line is set in high impedance state
+  | GND | Input              | Ground       | 
   | VDD | Input              | Power supply |
   | A0 - A2 | Input       | Address bus for registers |
   | TX      | Output         | Transmitter data line |
@@ -69,7 +70,9 @@
   | <ins>RST</ins> | Input   | Reset active low  |
   | CLK       | Input        | Clock        |
   | <ins>IREQ</ins> | Output  | Interrupt request active low  |
-  | GND | Input              | Ground       | 
+  | IACK    | Input   | Interrupt acknowledge / request acknowledge | 
+  | BREQ    | Output  | Bus request     |
+ 
 
   
   ## Configuration Protocol
@@ -302,7 +305,6 @@ If the programmer wants the device to interrupt when it receives a fixed amount 
   | PAR    | `(R/W)`     | Enable interrupt on parity error. |
   | OVR    | `(R/W)`     | Enable interrupt on overrun error. |
   | INTID  | `(R)`       | Returns the interrupt ID with the highest priority.
-  | IACK   | `(W)`       | Set this bit to acknowledge the interrupt, once it's cleared (the interrupt), the bit is resetted automatically.
 
   ### Interrupt Table
 
