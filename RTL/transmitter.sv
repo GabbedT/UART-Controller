@@ -47,23 +47,22 @@
 module transmitter (
     input  logic         clk_i,
     input  logic         rst_n_i,
-    input  logic         enable,
-    input  logic         ov_baud_rt_i,
-    input  logic [7:0]   data_tx_i,
-    input  logic         tx_fifo_write_i,
-    input  logic         config_req_mst_i,
-    input  logic         config_req_slv_i,
-    input  logic         tx_data_stream_mode_i,
-    input  logic [1:0]   data_width_i,
-    input  logic [1:0]   stop_bits_number_i,
-    input  logic [1:0]   parity_mode_i,
+    input  logic         enable,                // From REGISTERS
+    input  logic         ov_baud_rt_i,          // From BAUD RATE
+    input  logic [7:0]   data_tx_i,             // From CU
+    input  logic         tx_fifo_write_i,       // From CU
+    input  logic         config_req_mst_i,      // From REGISTERS
+    input  logic         config_req_slv_i,      // From RECEIVER
+    input  logic         tx_data_stream_mode_i, // From REGISTERS
+    input  logic [1:0]   data_width_i,          // From REGISTERS
+    input  logic [1:0]   stop_bits_number_i,    // From REGISTERS
+    input  logic [1:0]   parity_mode_i,         // From REGISTERS
 
-    output logic         tx_o,
-    output logic         tx_done_o,      
-    output logic         req_done_o,
-    output logic         tx_fifo_empty,
-    output logic         tx_fifo_full,
-    output logic         tx_idle_o
+    output logic         tx_o,          // To TOP
+    output logic         tx_done_o,     // To REGISTERS and CONTROL UNIT
+    output logic         req_done_o,    // To CONTROL UNIT
+    output logic         tx_fifo_full_o, // To REGISTERS
+    output logic         tx_idle_o      // To REGISTERS
 );
 
 //-----------//
@@ -87,8 +86,7 @@ module transmitter (
     );
 
     assign fifo_rst_n_i = rst_n_i | config_req_slv_i;
-    assign tx_fifo_full = fifo_full;
-    assign tx_fifo_empty = fifo_empty;
+    assign tx_fifo_full_o = fifo_full;
 
 
 //------------//
@@ -115,7 +113,7 @@ module transmitter (
     logic [2:0] bits_processed_CRT, bits_processed_NXT; 
 
         /* Register the output to not lose data */
-        always_ff @(posedge clk_i) begin : data_register
+        always_ff @(posedge clk_i or negedge rst_n_i) begin : data_register
             if (!rst_n_i) begin
                 data_tx_CRT <= 8'b0;
                 counter_10ms_CRT <= 'b0;
@@ -141,7 +139,7 @@ module transmitter (
     /* FSM current and next state */
     transmitter_fsm_e state_CRT, state_NXT;
 
-        always_ff @(posedge clk_i) begin : fsm_state_register
+        always_ff @(posedge clk_i or negedge rst_n_i) begin : fsm_state_register
             if (!rst_n_i) begin 
                 state_CRT <= TX_IDLE;
             end else if (config_req_slv_i) begin 
@@ -184,7 +182,7 @@ module transmitter (
 
                     if (!fifo_empty & enable) begin 
                         state_NXT = TX_START;
-                    end else if (config_req_mst_i) begin 
+                    end else if (config_req_mst_i & fifo_empty) begin 
                         state_NXT = TX_CFG_REQ;
                     end
                 end

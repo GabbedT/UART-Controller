@@ -49,27 +49,26 @@
 module receiver (
     input  logic         clk_i,
     input  logic         rst_n_i,
-    input  logic         enable,
-    input  logic         ov_baud_rt_i,
-    input  logic         rx_i,
-    input  logic         rx_fifo_read_i,
-    input  logic         req_ackn_i,
-    input  logic [5:0]   threshold_i,
-    input  logic         rx_data_stream_mode_i,
-    input  logic [1:0]   data_width_i,
-    input  logic [1:0]   stop_bits_number_i,
-    input  logic [1:0]   parity_mode_i,
-    
-    output logic         rx_fifo_full_o,
-    output logic         rx_fifo_empty_o,
-    output logic         config_req_slv_o,
-    output logic         overrun_error_o,
-    output logic         frame_error_o,
-    output logic         parity_o,
-    output logic         rx_done_o,
-    output logic         rxd_rdy_o,
-    output logic [7:0]   data_rx_o,
-    output logic         rx_idle_o
+    input  logic         enable,                
+    input  logic         ov_baud_rt_i,          
+    input  logic         rx_i,                  
+    input  logic         rx_fifo_read_i,        
+    input  logic         req_ackn_i,            
+    input  logic [5:0]   threshold_i,           
+    input  logic         rx_data_stream_mode_i, 
+    input  logic [1:0]   data_width_i,          
+    input  logic [1:0]   stop_bits_number_i,    
+    input  logic [1:0]   parity_mode_i,         
+
+    output logic         rx_fifo_full_o,        
+    output logic         rx_fifo_empty_o,        
+    output logic         config_req_slv_o,      
+    output logic         overrun_error_o,       
+    output logic         frame_error_o,         
+    output logic         parity_o,             
+    output logic         rx_data_ready_o,             
+    output logic [7:0]   data_rx_o,              
+    output logic         rx_idle_o              
 );
 
 //--------------//
@@ -86,19 +85,29 @@ module receiver (
 //  RX FIFO  //
 //-----------//
 
+    logic        read_i;
+    logic        fifo_rst_n_i;
+    logic        fifo_write, fifo_read;
+    logic        fifo_full, fifo_empty;
+    logic [10:0] fifo_data_read, fifo_data_write;
+
+    sync_FIFO_buffer #(11, RX_FIFO_DEPTH, 1) rx_fifo (
+        .clk_i     ( clk_i           ),
+        .rst_n_i   ( fifo_rst_n_i    ),
+        .read_i    ( fifo_read       ),
+        .write_i   ( fifo_write      ),
+        .wr_data_i ( fifo_data_write ),
+        .rd_data_o ( fifo_data_read  ),
+        .full_o    ( fifo_full       ),
+        .empty_o   ( fifo_empty      )
+    );
+
     /* Reset fifo if a configuration request is received */
     logic fifo_rst_n;
 
-    /* Interface declaration, 8 data bits, 2 error bits and 1 parity bit */
-    sync_fifo_interface #(11) fifo_if(clk_i);
-
-    assign fifo_if.read_i = rx_fifo_read_i;
-    assign fifo_if.rst_n_i = rst_n_i & fifo_rst_n; 
-
-    /* FIFO buffer instantiation in FWFT mode */
-    sync_FIFO_buffer_int #(TX_FIFO_DEPTH, 1) tx_fifo (clk_i, fifo_if);
-
-    assign rx_fifo_empty_o = fifo_if.empty_o;
+    assign fifo_rst_n_i = rst_n_i & fifo_rst_n;
+    assign fifo_read = rx_fifo_read_i;
+    assign rx_fifo_empty_o = fifo_empty;
 
 
 //------------//
@@ -124,7 +133,7 @@ module receiver (
     /* Count the amount of consecuteve SYN character received */
     logic [$clog2(SYN_NUMBER) - 1:0] syn_data_cnt_CRT, syn_data_cnt_NXT;
 
-        always_ff @(posedge clk_i) begin
+        always_ff @(posedge clk_i or negedge rst_n_i) begin
             if (!rst_n_i) begin
                 data_rx_CRT <= 8'b0;
                 counter_16br_CRT <= 4'b0;
@@ -149,7 +158,7 @@ module receiver (
      * stays low during configuration request */
     logic [$clog2(COUNT_1MS) - 1:0] counter_1ms_CRT, counter_1ms_NXT;
 
-        always_ff @(posedge clk_i) begin : ms10_counter
+        always_ff @(posedge clk_i or negedge rst_n_i) begin : ms10_counter
             if (!rst_n_i) begin 
                 counter_1ms_CRT <= 'b0;
             end else begin
@@ -175,7 +184,7 @@ module receiver (
      * must be set with the value 0. */
     logic [5:0] fifo_size_cnt_CRT, fifo_size_cnt_NXT;
 
-        always_ff @(posedge clk_i) begin : fifo_size_counter
+        always_ff @(posedge clk_i or negedge rst_n_i) begin : fifo_size_counter
             if (!rst_n_i) begin 
                 fifo_size_cnt_CRT <= 'b0;
             end else begin 
@@ -184,7 +193,7 @@ module receiver (
         end : fifo_size_counter
 
         always_comb begin : fifo_size_counter_logic
-            case ({fifo_if.write_i, fifo_if.read_i})
+            case ({fifo_write, fifo_read})
                 /* Writing */
                 2'b10: fifo_size_cnt_NXT = fifo_size_cnt_CRT + 1'b1;
                 /* Reading */
@@ -195,31 +204,12 @@ module receiver (
         end : fifo_size_counter_logic
 
 
-    /* Interrupt that assert if the fifo size hit the threshold (in data stream mode)
-     * or if data is received (in standard mode) */
-    logic rx_rdy_int_CRT, rx_rdy_int_NXT;
-
-        always_ff @(posedge clk_i) begin : data_ready_interrupt_reg
-            if (!rst_n_i) begin 
-                rx_rdy_int_CRT <= 1'b0;
-            end else if (!rx_data_stream_mode_i & fifo_if.read_i) begin 
-                /* Clear when reading data */
-                rx_rdy_int_CRT <= 1'b0;
-            end else if (rx_data_stream_mode_i & fifo_if.empty_o) begin 
-                /* Clear only if the fifo is empty */
-                rx_rdy_int_CRT <= 1'b0;
-            end else begin 
-                rx_rdy_int_CRT <= rx_rdy_int_NXT;
-            end
-        end : data_ready_interrupt_reg
-
-
     /* Configuration process requested. The request will be asserted
      * when the counter reaches the right value (RX low for 10ms) and
      * deasserted when the request is acknowledged */
     logic cfg_req_CRT, cfg_req_NXT;
 
-        always_ff @(posedge clk_i) begin 
+        always_ff @(posedge clk_i or negedge rst_n_i) begin 
             if (!rst_n_i) begin 
                 cfg_req_CRT <= 1'b0;
             end else if (req_ackn_i) begin 
@@ -239,7 +229,7 @@ module receiver (
     /* FSM current and next state */
     receiver_fsm_e state_CRT, state_NXT;
 
-        always_ff @(posedge clk_i) begin : fsm_state_register
+        always_ff @(posedge clk_i or negedge rst_n_i) begin : fsm_state_register
             if (!rst_n_i) begin 
                 state_CRT <= RX_IDLE;
             end else if (!fifo_rst_n) begin 
@@ -249,6 +239,9 @@ module receiver (
             end
         end : fsm_state_register
 
+
+    /* Data ready interrupt logic */
+    logic data_ready;
 
         always_comb begin 
 
@@ -262,15 +255,13 @@ module receiver (
             stop_bits_NXT = stop_bits_CRT;
             parity_bit_NXT = parity_bit_CRT;
             counter_16br_NXT = counter_16br_CRT;
-            rx_rdy_int_NXT = rx_rdy_int_CRT;
             syn_data_cnt_NXT = syn_data_cnt_CRT;
             stop_bits_cnt_NXT = stop_bits_cnt_CRT;
             bits_processed_NXT = bits_processed_CRT;
 
-            rx_done_o = 1'b0;
             rx_idle_o = 1'b0;
-            fifo_if.write_i = 1'b0;
-            fifo_rst_n = 1'b1;
+            fifo_write = 1'b0;
+            fifo_rst_n = 1'b1; 
 
             case (state_CRT)
 
@@ -388,22 +379,14 @@ module receiver (
                  *  During DONE state, the stop bits are detected. During 
                  *  this time the RX line must be stable on IDLE.
                  */
-                RX_DONE: begin  
-                    /* Raise an interrupt */
-                    if (state_NXT == RX_IDLE) begin
-                        if (rx_data_stream_mode_i) begin
-                            if (threshold_i != 'b0) begin 
-                                /* Interrupt if fifo size is greater or equal the threshold value */
-                                rx_rdy_int_NXT = (fifo_size_cnt_CRT >= threshold_i);
-                            end else if (threshold_i == 'b0) begin 
-                                /* Interrupt only if fifo is full in the next clock cycle (the counter ) */
-                                rx_rdy_int_NXT = (fifo_size_cnt_CRT == 6'b1);    
-                            end 
+                RX_DONE: begin 
+                    if (state_NXT == RX_IDLE) begin 
+                        if (data_rx_CRT == SYN) begin 
+                            syn_data_cnt_NXT = syn_data_cnt_CRT + 1'b1;
                         end else begin 
-                            rx_rdy_int_NXT = 1'b1;
+                            syn_data_cnt_NXT = 'b0;
                         end
                     end
-
 
                     if (ov_baud_rt_i) begin
                         if (counter_16br_CRT == 4'd15) begin
@@ -416,20 +399,12 @@ module receiver (
                                 SB_2BIT: begin 
                                     stop_bits_cnt_NXT = 1'b1;
                                     state_NXT = (stop_bits_cnt_CRT) ? RX_IDLE : RX_DONE; 
-                                    fifo_if.write_i = (stop_bits_cnt_CRT & !fifo_if.full_o);
-                                    rx_done_o = stop_bits_cnt_CRT;
+                                    fifo_write = (stop_bits_cnt_CRT & !fifo_full);
                                 end
                             
                                 default: begin 
-                                    if (data_rx_CRT == SYN) begin 
-                                        syn_data_cnt_NXT = syn_data_cnt_CRT + 1'b1;
-                                    end else begin 
-                                        syn_data_cnt_NXT = 'b0;
-                                    end
-                                    
                                     state_NXT = RX_IDLE; 
-                                    fifo_if.write_i = !fifo_if.full_o;
-                                    rx_done_o = 1'b1;
+                                    fifo_write = !fifo_full;
                                 end
                             endcase
                         end else begin 
@@ -441,44 +416,64 @@ module receiver (
         end
 
 
+        always_comb begin : rx_done_interrupt_logic
+            /* Raise an interrupt */
+            if ((state_NXT == RX_IDLE) & (state_CRT == RX_DONE)) begin
+                if (rx_data_stream_mode_i) begin
+                    if (threshold_i != 'b0) begin 
+                        /* Interrupt if fifo size is greater or equal the threshold value */
+                        data_ready = (fifo_size_cnt_CRT >= threshold_i);
+                    end else begin 
+                        /* Interrupt only if fifo is full */
+                        data_ready = fifo_full;    
+                    end 
+                end else begin 
+                    data_ready = 1'b1;
+                end
+            end else begin
+                data_ready = 1'b0;
+            end
+        end : rx_done_interrupt_logic
+
+
         always_comb begin : fifo_write_data_assignment
             /* Depending on the data width configuration the data received could 
              * not be shifted out completley */
             case (data_width_i)
-                DW_5BIT: fifo_if.wr_data_i[7:0] = {3'b0, data_rx_CRT[7:3]};
-                DW_6BIT: fifo_if.wr_data_i[7:0] = {2'b0, data_rx_CRT[7:2]};
-                DW_7BIT: fifo_if.wr_data_i[7:0] = {1'b0, data_rx_CRT[7:1]};
-                DW_8BIT: fifo_if.wr_data_i[7:0] = data_rx_CRT[7:0];
+                DW_5BIT: fifo_data_write[7:0] = {3'b0, data_rx_CRT[7:3]};
+                DW_6BIT: fifo_data_write[7:0] = {2'b0, data_rx_CRT[7:2]};
+                DW_7BIT: fifo_data_write[7:0] = {1'b0, data_rx_CRT[7:1]};
+                DW_8BIT: fifo_data_write[7:0] = data_rx_CRT[7:0];
             endcase
     
             case (parity_mode_i)
-                EVEN:    fifo_if.wr_data_i[PARITY_BIT] = parity_bit_CRT ^ 1'b0;
-                ODD:     fifo_if.wr_data_i[PARITY_BIT] = parity_bit_CRT ^ 1'b1;
-                default: fifo_if.wr_data_i[PARITY_BIT] = 1'b0;
+                EVEN:    fifo_data_write[PARITY_BIT] = parity_bit_CRT ^ 1'b0;
+                ODD:     fifo_data_write[PARITY_BIT] = parity_bit_CRT ^ 1'b1;
+                default: fifo_data_write[PARITY_BIT] = 1'b0;
             endcase
 
             /* AND the stop bits with the RX line: if the first stop bits was 0
              * then 'stop_bits_CRT' would be 0 too generating a frame error. 
              * The same goes for the single stop bit. If uart is receiving 0x00
              * then frame error is disabled */
-            fifo_if.wr_data_i[FRAME] = !(stop_bits_CRT & rx_i);
+            fifo_data_write[FRAME] = !(stop_bits_CRT & rx_i);
 
             /* Raise an overrun error if the fifo has reached the threshold level or
              * the data has been received and the device is receiving other data */
-            fifo_if.wr_data_i[OVERRUN] = rx_rdy_int_CRT & (state_CRT != RX_IDLE);
+            fifo_data_write[OVERRUN] = data_ready & (state_CRT != RX_IDLE);
         end : fifo_write_data_assignment
 
     /* Output assignment */
-    assign data_rx_o = fifo_if.rd_data_o[7:0];
-    assign rxd_rdy_o = rx_rdy_int_CRT;
+    assign data_rx_o = (rx_fifo_read_i) ? fifo_data_read[7:0] : 8'b0;
+    assign rx_data_ready_o = data_ready;
 
     /* Should be asserted for only 1 clock cycle */
-    assign frame_error_o = fifo_if.rd_data_o[FRAME] & rx_fifo_read_i;
-    assign overrun_error_o = fifo_if.rd_data_o[OVERRUN] & rx_fifo_read_i;
-    assign parity_o = fifo_if.rd_data_o[PARITY_BIT] & rx_fifo_read_i;
+    assign frame_error_o = fifo_data_read[FRAME] & rx_fifo_read_i;
+    assign overrun_error_o = fifo_data_read[OVERRUN] & rx_fifo_read_i;
+    assign parity_o = fifo_data_read[PARITY_BIT] & rx_fifo_read_i;
 
-    /* If the threshold is set to 0 and DSM is active, the signal 'rxd_rdy_o' already signal the fifo being full. */
-    assign rx_fifo_full_o = (rx_data_stream_mode_i & (threshold_i == 6'b0)) ? 1'b0 : fifo_if.full_o;
+    /* If the threshold is set to 0 and DSM is active, the signal 'rx_data_ready_o' already signal the fifo being full. */
+    assign rx_fifo_full_o = (rx_data_stream_mode_i & (threshold_i == 6'b0)) ? 1'b0 : fifo_full;
 
 endmodule : receiver
 

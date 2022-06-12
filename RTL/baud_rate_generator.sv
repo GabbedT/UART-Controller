@@ -45,11 +45,11 @@
     `define BAUD_RATE_GENERATOR_INCLUDE
 
 module baud_rate_generator (
-    input  logic                    clk_i,
+    input  logic                    clk_i,      
     input  logic                    rst_n_i,
-    input  logic [15:0]             divisor_i,
+    input  logic [15:0]             divisor_i,      // From REGISTERS
 
-    output logic                    ov_baud_rt_o 
+    output logic                    ov_baud_rt_o    // To RECEIVER and TRANSMITTER
 );
 
 //----------//
