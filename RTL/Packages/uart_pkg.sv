@@ -17,6 +17,10 @@ package uart_pkg;
     /* Standard baud rate */
     localparam STD_BAUD_RATE = 9600;
 
+    /* Define ISR vector placed on the bus in 
+     * vectored interrupt mode */
+    localparam UART_ISR_VECTOR = 8'hFF;
+
 
 //===========================//
 //  GENERAL UART PARAMETERS  //
@@ -71,19 +75,23 @@ package uart_pkg;
     localparam logic [1:0] END_CONFIGURATION_ID = 2'b00;
 
 
-//-----------------//
-//  INTERRUPT IDS  //
-//-----------------//
+//-------------//
+//  INTERRUPT  //
+//-------------//
 
     /* Interrupt id */
-    localparam INT_CONFIG_FAIL = 3'b000;
-    localparam INT_OVERRUN     = 3'b001;
-    localparam INT_FRAME       = 3'b010;
-    localparam INT_PARITY      = 3'b011;
-    localparam INT_RXD_RDY     = 3'b100;
-    localparam INT_RX_FULL     = 3'b101;
-    localparam INT_CONFIG_REQ  = 3'b110;
-    localparam INT_TX_DONE     = 3'b111;
+    localparam INT_TX_DONE     = 3'b000;
+    localparam INT_CONFIG_FAIL = 3'b001;
+    localparam INT_OVERRUN     = 3'b010;
+    localparam INT_FRAME       = 3'b011;
+    localparam INT_PARITY      = 3'b100;
+    localparam INT_RXD_RDY     = 3'b101;
+    localparam INT_RX_FULL     = 3'b110;
+    localparam INT_CONFIG_REQ  = 3'b111;
+
+    /* Interrupt response mode */
+    localparam NORMAL       = 2'b00;
+    localparam FAST_CLEAR   = 2'b01;
 
 
 //----------------------//
@@ -137,7 +145,6 @@ package uart_pkg;
 
     localparam READ = 1;
     localparam WRITE = 0;
-
 
 
 //=========================//
@@ -195,12 +202,11 @@ package uart_pkg;
 //----------------//
 
     typedef struct packed {
-        logic       RESERVED;
+        logic       VECTORED;
         logic       INTPEND;
         logic [1:0] COM;
         logic       ENREQ;
         logic       CDONE;
-        logic       AKREQ;
         logic       STDC;
     } CTR_data_t;
 
@@ -210,12 +216,12 @@ package uart_pkg;
 //----------------//
 
     typedef struct packed {
+        logic       TXDONE;
         logic       RXRDY;
         logic       FRM;
         logic       PAR;
         logic       OVR;
         logic [2:0] INTID;
-        logic       IACK;
     } ISR_data_t;
 
 
@@ -288,12 +294,12 @@ package uart_pkg;
         /* 
         * Drive TX low to send the initialization signal 
         */
-        SETUP_SLV,
+        WAIT_CFG_PKT_SLV,
 
         /* 
         * Send configuration packets
         */ 
-        SETUP_MST,
+        SEND_CFG_PKT_MST,
 
         /* 
         * Wait transmitter to end the request or a configuration
@@ -407,6 +413,25 @@ package uart_pkg;
         */
         TX_DONE
     } transmitter_fsm_e;
+
+
+//---------------------//
+//  INTERRUPT ARBITER  //
+//---------------------//
+
+    typedef enum logic [2:0] {
+        IDLE,
+
+        /* Wait interrupt to be cleared */
+        PRIO1_WAIT_ACKN,
+        PRIO2_WAIT_ACKN,
+        PRIO3_WAIT_ACKN,
+        
+        /* IRQ should stay low for at least 1 clock cycle */
+        PRIO1_CLEAR,
+        PRIO2_CLEAR,
+        PRIO3_CLEAR
+    } normal_interrupt_response_fsm_e;
 
 endpackage : uart_pkg
 
