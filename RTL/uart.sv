@@ -89,7 +89,7 @@ module uart (
     logic [7:0]   data_rx, data_TXR;
     logic         tx_done, req_done;
     logic         parity;
-    logic         rx_fifo_empty, rx_fifo_read, tx_fifo_write;
+    logic         rx_fifo_empty, rx_fifo_read, tx_fifo_write, tx_fifo_full;
     logic         config_request_acknowledged;
     logic         enable_configuration;
     logic         configuration_received, send_configuration;
@@ -104,8 +104,8 @@ module uart (
     logic         configuration_error, parity_error;
 
     control_unit controller (
-        .rst_n_i                 ( clk_i                       ),
-        .clk_i                   ( rst_sync                    ),
+        .clk_i                   ( clk_i                       ),
+        .rst_n_i                 ( rst_sync                    ),
         .data_rx_i               ( data_rx                     ),
         .data_tx_i               ( data_TXR                    ),
         .tx_done_i               ( tx_done                     ),
@@ -114,6 +114,7 @@ module uart (
         .rx_fifo_empty_i         ( rx_fifo_empty               ),
         .rx_fifo_read_i          ( rx_read                     ),
         .tx_fifo_write_i         ( tx_write                    ),
+        .tx_fifo_full_i          ( tx_fifo_full                ),
         .request_ack_i           ( config_request_acknowledged ),
         .enable_config_receive_i ( enable_configuration        ),
         .config_req_slv_i        ( configuration_received      ),
@@ -140,7 +141,6 @@ module uart (
 
     logic  tx_enable;
     logic  tx_data_stream_mode;
-    logic  tx_fifo_full;
     logic  tx_idle;
 
     transmitter tx (

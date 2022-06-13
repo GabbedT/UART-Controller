@@ -89,7 +89,7 @@ module interrupt_arbiter (
 
     assign tx_done = tx_done_i & tx_done_en_i;
     assign overrun_error = overrun_error_i & overrun_error_en_i;
-    assign parity_error = parity_error_i & parity_error_en_i;
+    assign parity_error = parity_error_i & parity_error_en_i & rx_rdy_i;
     assign frame_error = frame_error_i & frame_error_en_i;
 
     /* The same transaction would generate two different interrupt with the same clear
@@ -269,9 +269,9 @@ module interrupt_arbiter (
     /* One hot selector */
     logic [2:0] priority_select;
 
-    assign priority_select[0] = |p1_int_bundle_NXT;
-    assign priority_select[1] = |p2_int_bundle_NXT;
-    assign priority_select[2] = |p3_int_bundle_NXT;
+    assign priority_select[0] = |p1_int_bundle_NXT & !disable_interrupts_i;
+    assign priority_select[1] = |p2_int_bundle_NXT & !disable_interrupts_i;
+    assign priority_select[2] = |p3_int_bundle_NXT & !disable_interrupts_i;
 
 
 //-------------//

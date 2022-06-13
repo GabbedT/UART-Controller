@@ -109,9 +109,9 @@ module configuration_registers (
     logic config_done;
 
     edge_detector #(1) config_done_edge (
-        .clk_i        ( clk_i         ),
+        .clk_i        ( clk_i                ),
         .signal_i     ( configuration_done_i ),
-        .edge_pulse_o ( config_done   )
+        .edge_pulse_o ( config_done          )
     );
 
         /* Since the device must not change immediatly the configuration
@@ -146,7 +146,11 @@ module configuration_registers (
 
     assign change_config = (STR_data.DWID != data_width) | (STR_data.PMID != parity_mode) | (STR_data.SBID != stop_bits);
 
-    assign send_configuration_req_o = change_config & write_i;
+    edge_detector #(1) config_change_edge (
+        .clk_i        ( clk_i                    ),
+        .signal_i     ( change_config            ),
+        .edge_pulse_o ( send_configuration_req_o )
+    );
 
 
 //----------------//

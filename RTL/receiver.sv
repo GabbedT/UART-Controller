@@ -251,7 +251,6 @@ module receiver (
 
             state_NXT = state_CRT;
             data_rx_NXT = data_rx_CRT;
-            cfg_req_NXT = cfg_req_CRT;
             stop_bits_NXT = stop_bits_CRT;
             parity_bit_NXT = parity_bit_CRT;
             counter_16br_NXT = counter_16br_CRT;
@@ -259,9 +258,10 @@ module receiver (
             stop_bits_cnt_NXT = stop_bits_cnt_CRT;
             bits_processed_NXT = bits_processed_CRT;
 
-            rx_idle_o = 1'b0;
-            fifo_write = 1'b0;
-            fifo_rst_n = 1'b1; 
+            cfg_req_NXT = 1'b0;  
+            rx_idle_o = 1'b0;   
+            fifo_write = 1'b0;  
+            fifo_rst_n = 1'b1;  
 
             case (state_CRT)
 
@@ -283,7 +283,7 @@ module receiver (
                  *  The device is receiving a configuration request. This state 
                  *  is reached after receiving 3 SYN character. 
                  */
-                RX_CONFIG_REQ: begin 
+                RX_CONFIG_REQ: begin
                     syn_data_cnt_NXT = 'b0;
 
                     /* Could be a false request, recover from it */
@@ -380,14 +380,6 @@ module receiver (
                  *  this time the RX line must be stable on IDLE.
                  */
                 RX_DONE: begin 
-                    if (state_NXT == RX_IDLE) begin 
-                        if (data_rx_CRT == SYN) begin 
-                            syn_data_cnt_NXT = syn_data_cnt_CRT + 1'b1;
-                        end else begin 
-                            syn_data_cnt_NXT = 'b0;
-                        end
-                    end
-
                     if (ov_baud_rt_i) begin
                         if (counter_16br_CRT == 4'd15) begin
                             /* AND the rx line with the stop bits so if in the
@@ -411,6 +403,14 @@ module receiver (
                             counter_16br_NXT = counter_16br_CRT + 1'b1;
                         end
                     end
+
+                    if (state_NXT == IDLE) begin
+                        if (data_rx_CRT == SYN) begin 
+                            syn_data_cnt_NXT = syn_data_cnt_CRT + 1'b1;
+                        end else begin
+                            syn_data_cnt_NXT = 'b0;
+                        end
+                    end
                 end
             endcase
         end
@@ -430,8 +430,15 @@ module receiver (
                 end else begin 
                     data_ready = 1'b1;
                 end
+
+                // if (data_rx_CRT == SYN) begin 
+                //     syn_data_cnt_NXT = syn_data_cnt_CRT + 1'b1;
+                // end else begin
+                //     syn_data_cnt_NXT = 'b0;
+                // end
             end else begin
                 data_ready = 1'b0;
+                // syn_data_cnt_NXT = syn_data_cnt_CRT;
             end
         end : rx_done_interrupt_logic
 

@@ -62,6 +62,7 @@ module control_unit (
     /* FIFO status */ 
     input  logic         rx_fifo_empty_i,   // From RECEIVER 
     input  logic         rx_fifo_read_i,    // From RECEIVER
+    input  logic         tx_fifo_full_i,
     input  logic         tx_fifo_write_i,   // From TRANSMITTER
     
     /* Configuration */
@@ -165,9 +166,9 @@ module control_unit (
             /* Default next state logic */
             state_NXT = state_CRT; 
             counter_10ms_NXT = 'b0;
-            config_failed_NXT = 'b0;
+            config_failed_NXT = config_failed_CRT;
             config_packet_type_NXT = config_packet_type_CRT;
-            syn_data_cnt_NXT = 'b0;
+            syn_data_cnt_NXT = syn_data_cnt_CRT;
 
             /* Configuration signals */
             STR_en_o = 1'b0;
@@ -227,24 +228,19 @@ module control_unit (
                  */
                 CFG_REQ_MST: begin
                     /* Send 3 SYN characters */
-                    if (syn_data_cnt_CRT != SYN_NUMBER) begin 
+                    if ((syn_data_cnt_CRT != SYN_NUMBER) & (!tx_fifo_full_i)) begin 
                         tx_fifo_write_o = 1'b1;
                         data_tx_o = SYN;
                         syn_data_cnt_NXT = syn_data_cnt_CRT + 1'b1;
                     end else begin
-                        config_req_mst_o = 1'b1;
-
-                        if (req_done_i) begin
-                            tx_fifo_write_o = 1'b1;
-                            data_tx_o = SYN;                
-                            state_NXT = (tx_done_i) ? WAIT_REQ_ACKN_MST : CFG_REQ_MST;
-                        end
+                        config_req_mst_o = 1'b1;            
+                        state_NXT = (req_done_i) ? WAIT_REQ_ACKN_MST : CFG_REQ_MST;
                     end
                 end
 
                 /*
                  *  The device waits for the other device to acknowledge the configuration request. 
-                 *  It needs to receive an acknowledgement packet within 50ms otherwise the device will
+                 *  It needs to receive an acknowledgement packet within 10ms otherwise the device will
                  *  send another request. The process repeat for three times at the most, then the 
                  *  configuration will be considered failed and the device setted with the standard
                  *  configuration. 
@@ -252,6 +248,7 @@ module control_unit (
                 WAIT_REQ_ACKN_MST: begin 
                     counter_10ms_NXT = counter_10ms_CRT + 1'b1;
                     config_req_mst_o = 1'b0;
+                    syn_data_cnt_NXT = 'b0;
 
                     if (config_failed_CRT == 2'd3) begin 
                         /* Raise a configuration error and set the standard configuration */
@@ -262,9 +259,7 @@ module control_unit (
                         /* Read the data when the fifo is not empty */
                         rx_fifo_read_o = !rx_fifo_empty_i;
 
-                        if ((config_packet_type_CRT == EC_TYPE) & (data_rx_i == ACKN_PKT)) begin 
-                            state_NXT = MAIN;
-                        end else if (data_rx_i == ACKN_PKT) begin 
+                        if (data_rx_i == ACKN_PKT) begin 
                             state_NXT = SEND_CFG_PKT_MST;
                         end
                     end else if (counter_10ms_CRT == COUNT_10MS) begin 
@@ -322,6 +317,7 @@ module control_unit (
                         /* If the end configuration packet was sended go in main state */
                         if (config_packet_type_CRT == EC_TYPE) begin 
                             state_NXT = MAIN;
+                            config_done_o = 1'b1;
                         end else begin 
                             state_NXT = SEND_CFG_PKT_MST; 
                         end
@@ -378,6 +374,7 @@ module control_unit (
                     if (tx_done_i) begin 
                         if (config_packet_type_CRT == EC_TYPE) begin 
                             state_NXT = MAIN;
+                            config_done_o = 1'b1;
                         end else begin 
                             state_NXT = WAIT_CFG_PKT_SLV;
                         end
