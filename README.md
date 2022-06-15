@@ -67,7 +67,7 @@
 
   ## Top Level View
 
-  ![PACKAGE](Images/Package.png)
+  ![PACKAGE](Images/Package.PNG)
 
   ## Signal Description
 
