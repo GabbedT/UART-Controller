@@ -4,77 +4,14 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
-
-/*
- *  Define the system clock here or include it with the same name.
- *  The system clock is used to calculate the desired baud rate.
- */
-#define SYS_CLOCK_FREQ 100'000'000  /*  100MHz clock  */
-
-#define RX_FIFO_SIZE 64     /* In byte */
-#define TX_FIFO_SIZE 64     /* In byte */
-
-
-//---------------//
-//  ENUMERATIONS //
-//---------------//
-
-    /* Interrupt code */
-    typedef enum {
-        INT_TX_DONE = 0b000,
-        INT_CONFIG_FAIL = 0b001,
-        INT_OVERRUN = 0b010,
-        INT_PARITY = 0b011,
-        INT_FRAME = 0b100,
-        INT_RXD_RDY = 0b101,
-        INT_RX_FULL = 0b110,
-        INT_CONFIG_REQ = 0b111
-    } uartInterruptID_t;
-
-
-    /*  Data width configuration code  */
-    typedef enum {
-        DATA_WIDTH_5 = 0,
-        DATA_WIDTH_6 = 1,
-        DATA_WIDTH_7 = 2,
-        DATA_WIDTH_8 = 3
-    } uartDataWidth_t;
-
-
-    /*  Stop bits number configuration code  */
-    typedef enum {
-        STOP_BITS_1 = 0,
-        STOP_BITS_2 = 1,
-        STOP_BITS_RESERVED1 = 2,
-        STOP_BITS_RESERVED2 = 3
-    } uartStopBits_t;
-
-
-    /*  Parity mode configuration code  */
-    typedef enum {
-        PARITY_EVEN = 0,
-        PARITY_ODD = 1,
-        PARITY_DISABLED_1 = 2,
-        PARITY_DISABLED_2 = 3
-    } uartParityMode_t;
-    
-
-    /* Communication mode */
-    typedef enum {
-        DISABLE     = 0,
-        SIMPLEX_TX  = 1,
-        SIMPLEX_RX  = 2,
-        FULL_DUPLEX = 3
-    } uartCommMode_t;
+#include "uart_defines.h"
 
 
 //----------//
 //  DEVICE  //
 //----------//
 
-/* Struct that incapsulate the register map and data of the device */
 typedef struct {
-    /*  REGISTER MAP  */
 
     /*  Status Register            */
     uint8_t STR;
@@ -93,16 +30,33 @@ typedef struct {
     /*  TX Register                */
     uint8_t TXR;
 
-    /*  DEVICE DATA  */
+} volatile uart_registers_t;
 
-    /* When the device interrupt in data stream mode because the rx fifo is full the stream retrieved is saved here */
-    uint8_t *gDataStrmRxInt;
 
-    /* When the device interrupt in normal mode because a byte is received that byte is saved here */
-    uint8_t gDataRxInt;
+/* Struct that incapsulate the register map and data of the device */
+typedef struct {
 
-    /* Set this bit if the device fails configuring */
-    bool configFailed;
+    /* Pointer to a device to support MMIO */
+    uart_registers_t *device;
+
+    /* Device configuration */
+    uint8_t config;
+    bool failedConfig;
+    uint32_t baudRate;
+    uint32_t errors;
+
+    /* The buffer is automatically loaded when new data is 
+     * ready if interrupts are enabled. (RX BUFFER != RX FIFO) */
+    uint8_t rxDataBuf[RX_UART_BUFFER_SIZE];
+    size_t rxWrite_idx;
+    size_t rxRead_idx;
+
+    /* The buffer automatically load new data into the device
+     * every time it interrupts. (TX BUFFER != TX FIFO) */
+    uint8_t txDataBuf[TX_UART_BUFFER_SIZE];
+    size_t txWrite_idx;
+    size_t txRead_idx;
+
 } volatile uart_t;
 
 
@@ -116,11 +70,11 @@ uart_t *gHandle;
 //------------------//
 
 /* The device is initialized with the standard configuration. */
-void uart_initStd();
+void uart_std_config();
 
 
 /* Initialize the device with baudrate and configuration parameters. */
-void uart_init(uint32_t baudRate, uartDataWidth_t dataWidth, uartParityMode_t parityMode,uartStopBits_t stopBits, bool dataStreamMode, uint32_t threshold);
+void uart_init(uint32_t baudRate, uint8_t dataWidth, uint8_t parityMode, uint8_t stopBits, bool rxDataStreamMode, bool txDataStreamMode, uint8_t threshold);
 
 
 
@@ -128,23 +82,16 @@ void uart_init(uint32_t baudRate, uartDataWidth_t dataWidth, uartParityMode_t pa
 //  BAUD RATE  //
 //-------------//
 
-void uart_setBaudRate(uint32_t baudRate);   
-
-
-uint32_t uart_getBaudRate();
+void uart_set_baudrate(uint32_t baudRate);   
 
 
 
 //----------------//
 //  RX OPERATION  //
-//----------------//   
-
-/* Receiver buffer empty status.*/
-inline bool uart_rxEmpty();        
-
+//----------------//         
 
 /* Retrieve a byte from the UART. */
-const uint8_t uart_readByte(); 
+uint8_t uart_read_data(); 
 
 
 /*
@@ -152,7 +99,7 @@ const uint8_t uart_readByte();
  *  by the "size" parameter. The function use is legal to use only if the UART is in data 
  *  stream mode. Otherwise every read the UART will generate an interrupt request.
  */
-const uint8_t* uart_readByteStream(size_t size);
+void uart_read_data_stream(uint8_t* stream, size_t size);
 
 
 /*  
@@ -160,20 +107,30 @@ const uint8_t* uart_readByteStream(size_t size);
  *  use is legal to use only if the UART is in data stream mode. Otherwise every read the UART 
  *  will generate an interrupt request.
  */
-const char* uart_readString();  
+void uart_read_string(char* str);  
+
+
+/* 
+ *  Read a stream of data from the receiver buffer, to empty the buffer use the write pointer
+ *  'rxWrite_idx' as size parameter.
+ */
+void uart_read_stream_rxbuf(uint8_t* stream, size_t size);
+
+
+/* 
+ *  Read a single byte of data from the receiver buffer
+ */
+uint8_t uart_read_data_rxbuf();
 
 
 
 //----------------//
 //  TX OPERATION  //
-//----------------//
-
-/* Transmitter buffer full status.*/
-inline bool uart_txFull();    
+//----------------//  
 
 
 /* Transmit a byte */
-void uart_sendByte(uint8_t data); 
+void uart_send_data(const uint8_t data); 
 
 
 /* 
@@ -182,7 +139,7 @@ void uart_sendByte(uint8_t data);
  *  become really slow because once the buffer is full, it needs to wait until the next character
  *  is sent.
  */
-void uart_sendByteStream(const uint8_t *stream, size_t size);  
+void uart_send_data_stream(const uint8_t *stream, const size_t size);  
 
 
 /* 
@@ -190,7 +147,18 @@ void uart_sendByteStream(const uint8_t *stream, size_t size);
  *  the buffer size, the function will become really slow because once the buffer is full, it needs 
  *  to wait until the next character.
  */
-void uart_sendString(const char *string); 
+void uart_send_string(const char *string); 
+
+
+/*
+ *  Fill the transmitter buffer with a stream of data ready to be sent.
+ */
+void uart_fill_stream_txbuf(const uint8_t *stream, const size_t size);
+
+/*
+ *  Fill the transmitter buffer with a single byte of data ready to be sent.
+ */
+void uart_fill_data_txbuf(const uint8_t data);
 
 
 
@@ -198,76 +166,26 @@ void uart_sendString(const char *string);
 //  UART CONFIGURATION  //
 //----------------------//
 
-/* Get data width configuration parameter */
-inline uartDataWidth_t uart_getDataWidth();   
-
-
-/* Get parity mode configuration parameter */
-inline uartParityMode_t uart_getParityMode();  
-
-
-/* Get stop bits number configuration parameter */
-inline uartStopBits_t uart_getStopBits();
-
-
-/* Get data receiver stream mode configuration */
-inline bool uart_getRxDataStreamMode();
-
-
-/* Get data transmitter stream mode configuration */
-inline bool uart_getTxDataStreamMode();
-
-
-/* Get communication mode */
-inline uartCommMode_t uart_getCommunicationMode();
-
-
-/* Get receiving configuration request parameter */
-inline bool uart_getReceivingCfgReq();
-
-
-/* Set data width configuration parameter */
-inline void uart_setDataWidth(uartDataWidth_t dataWidth);
-
-
-/* Set parity mode configuration parameter */
-inline void uart_setParityMode(uartParityMode_t parityMode);
-
-
-/* Set stop bits number configuration parameter */
-inline void uart_setStopBits(uartStopBits_t stopBitsNumber);  
-
+void uart_set_configuration(uint8_t dataWidth, uint8_t parityMode, uint8_t stopBits);
 
 /* Enable or disable receiver data stream mode. */
-inline void uart_setRxDataStreamMode(bool dataStreamMode);
+void uart_set_rxdsm(bool dataStreamMode);
 
 
 /* Enable or disable transmitter data stream mode. */
-inline void uart_setTxDataStreamMode(bool dataStreamMode);
+void uart_set_txdsm(bool dataStreamMode);
 
 
 /* Send the maximum number of data the rx fifo can store before interrupting */
-inline void uart_setThresholdBuf(uint32_t threshold);
+void uart_set_threshold(uint32_t threshold);
 
 
 /* Set communication mode */
-inline void uart_setCommunicationMode(uartCommMode_t commMode); 
+void uart_set_communication_mode(uint8_t mode); 
 
 
 /* Enable receiving configuration request */
-inline void uart_setReceivingCfgReq(bool enableRecReq);
-
-
-//---------------//
-//  UART STATUS  //
-//---------------//
-
-/* Set standard configuration */
-inline void uart_setStdConfig();
-
-
-/* Acknowledge configuration request from another device, used in the interrupt service routine */
-inline void uart_acknConfigReq();
+void uart_enable_config_req(bool enableReq);
 
 
 
@@ -276,27 +194,26 @@ inline void uart_acknConfigReq();
 //-------------//
 
 /* Enable interrupt on overrun error */
-inline void uart_enableIntOverrun(bool enable);     
+void uart_enable_int_overrun(bool enable);     
 
 
 /* Enable interrupt on parity error */
-inline void uart_enableIntParity(bool enable); 
+void uart_enable_int_parity(bool enable); 
 
 
 /* Enable interrupt on frame error */
-inline void uart_enableIntFrame(bool enable);          
+void uart_enable_int_frame(bool enable);          
 
 
 /* Enable interrupt on data received */
-inline void uart_enableIntRxDRdy(bool enable);
+void uart_enable_int_rxrdy(bool enable);
 
-
-/* Get interrupt ID */
-inline uint32_t uart_getIntID();
+/* Enable interrupt on data transmitted */
+void uart_enable_int_txrdy(bool enable);
 
 
 /* This routine may not work because it's dependant on the system. */
-void uart_interruptServiceRoutine() __attribute__((interrupt("IRQ")));
+void uart_interrupt_service_routine() __attribute__((interrupt("IRQ")));
 
 
 #endif

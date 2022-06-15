@@ -5,88 +5,63 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include "uart.h"
-#include "uart_regmap.h"
+#include "uart_defines.h"
 
 //------------------//
 //  INITIALIZATION  //
 //------------------//
 
-void uart_setStdConfig() {
-    gHandle->CTR |= STD_CONFIG;
-    uart_setBaudRate(9600);
-    uart_setDataStreamMode(false);
-    uart_setThresholdBuf(0);
+void uart_std_config() {
+    gHandle->device->CTR |= SET_STD_CONFIG;
 }
 
 
-void uart_acknConfigReq() {
-    gHandle->CTR |= ACKN_CFG;
-}
+void uart_init(uint32_t baudRate, uint8_t dataWidth, uint8_t parityMode, uint8_t stopBits, bool rxDataStreamMode, bool txDataStreamMode, uint8_t threshold) {
+    uart_set_baud_rate(baudRate);
+    uart_set_rxdsm(rxDataStreamMode);
+    uart_set_txdsm(txDataStreamMode);
+    uart_set_threshold(threshold);
 
-
-void uart_initStd() {
-    /* Set standard configuration bit */
-    uart_setStdConfig();
-}
-
-void uart_init(uint32_t baudRate, uartDataWidth_t dataWidth, uartParityMode_t parityMode,uartStopBits_t stopBits, bool dataStreamMode, uint32_t threshold) {
-    uart_setBaudRate(baudRate);
-    uart_setDataStreamMode(1);
-    uart_setThresholdBuf(threshold);
-    uint8_t trashData;
-
-    /* Wait until the buffers are empty */  
-    while ((!uart_rxEmpty()) && (!uart_txEmpty())) {
-        trashData = gHandle->RXR;
+    /* Store data until RX buffer is empty */  
+    while (!(gHandle->device->FSR & RX_EMPTY)) {
+        gHandle->rxDataBuf[gHandle->rxWrite_idx] = gHandle->device->RXR;
+        ++gHandle->rxWrite_idx;
     }
-    uart_setDataStreamMode(dataStreamMode);
 
     /* Clear the configuration bit fields */
-    uint8_t dataSTR = gHandle->STR;
-    dataSTR &= ~(DATA_WIDTH | PARITY_MODE | STOP_BITS);
+    gHandle->config = gHandle->device->STR;
+    gHandle->config &= ~(DATA_WIDTH | PARITY_MODE | STOP_BITS);
 
     /* Write parameters in the right register field */
-    dataSTR |= dataWidth;
-    dataSTR |= parityMode << 2;
-    dataSTR |= stopBits << 4;
+    gHandle->config |= dataWidth | (parityMode << 2) | (stopBits << 4);
+    gHandle->baudRate = baudRate;
 
-    gHandle->STR = dataSTR;
+    gHandle->device->STR = gHandle->config;
 
-    /* Send 3 SYN character */
-    for (int i = 0; i < 3; i++) {
-        uart_sendByte(0x16);
-    }
-
-    /* In this case the device will be the master, initiate a configuration process
-     * by sending a configuration request. The device hardware will take care of the
-     * devices intercommunication process.*/ 
-    gHandle->CTR |= CFG_REQ_MST;
-    do { } while (!(gHandle->CTR & CFG_DONE));
-
-    /* Send another SYN character to reset the internal counters of the slave */
-    uart_sendByte(0x16);
+    /* Wait the device to start the configuration process */
+    while (gHandle->device->CTR & CFG_DONE) {}
+    /* Wait the device to end the configuration process */
+    while (!(gHandle->device->CTR & CFG_DONE)) {}
 }   
+
 
 
 //-------------//
 //  BAUD RATE  //
 //-------------//
 
-void uart_setBaudRate(uint32_t baudRate) {
+void uart_set_baudrate(uint32_t baudRate) {
     /* Calculate the divisor value to obtain the desired baud rate */
     uint16_t divisor = (uint16_t)((SYS_CLOCK_FREQ / (16 * baudRate)) - 1);
+    gHandle->baudRate = baudRate;
 
     /* Setting the divisor in two different instruction is legal because
      * when the device receives a matching address with the first half 
      * of the register it waits until the other portion is addressed */
-    gHandle->LDVR = (uint8_t) divisor;
-    gHandle->UDVR = (uint8_t) ((divisor & 0xFF00) >> 8);
+    gHandle->device->LDVR = (uint8_t) divisor;
+    gHandle->device->UDVR = (uint8_t) ((divisor & 0xFF00) >> 8);
 }
 
-uint32_t uart_getBaudRate() {
-    uint16_t divisor = ((gHandle->CTR & UPPER_DIVISOR) << 8) | (gHandle->CTR & LOWER_DIVISOR);
-    return SYS_CLOCK_FREQ / (16 * (divisor + 1));
-}
 
 
 //----------------//
@@ -94,60 +69,69 @@ uint32_t uart_getBaudRate() {
 //----------------//
 
 
-bool uart_rxEmpty() {
-    return gHandle->FSR & RX_EMPTY;
+uint8_t uart_read_data() {
+    return gHandle->device->RXR;
 }
 
 
-const uint8_t uart_readByte() {
-    return gHandle->RXR;
-}
-
-
-const uint8_t* uart_readByteStream(size_t size) {
-    /* Check if byte stream mode is enabled */
-    if (!(gHandle->STR & RX_DATA_STREAM_MODE)) {
+void uart_read_data_stream(uint8_t* stream, size_t size) {
+    /* Check if byte stream mode is enabled or RX fifo is empty */
+    if (!(gHandle->device->STR & RX_DATA_STREAM_MODE) || (gHandle->device->FSR & RX_EMPTY)) {
         return NULL;
     } 
-
-    /* Allocate the right amount of memory to store the data stream */
-    uint8_t* byteStream = (uint8_t*) malloc(size * sizeof(uint8_t));
-
-    /* Check if the allocation fails */
-    if (byteStream == NULL) {
-        return NULL;
-    }
 
     /* Keep reading until the end of the array or there's no data in the fifo anymore */  
-    while (uart_rxEmpty() || (byteStream < (byteStream + size))) {
-        *byteStream = gHandle->RXR;
-        ++byteStream;    
+    for (size_t i = 0; i < size; ++i) {
+        stream[i] = gHandle->device->RXR;
     }
-
-    return byteStream;
 }
 
 
-const char* uart_readString() {
+void uart_read_string(char* str) {
     /* Check if byte stream mode is enabled */
-    if (!(gHandle->STR & RX_DATA_STREAM_MODE)) {
+    if (!(gHandle->device->STR & RX_DATA_STREAM_MODE)) {
         return NULL;
     } 
 
-    char* stringRx;
+    size_t i = 0;
 
-    /* Keep reading until the end of string ('\0') character is received
-     * or the buffer is empty */
+    /* Keep reading until the end of string ('\0') character is received */
     do {
-        /* Every cycle keep allocating new memory */
-        stringRx = (char*) malloc(sizeof(char));
+        str[i] = gHandle->device->RXR;
+    } while (str[i] != '\0');
+}
 
-        /* Store character and increment the pointer */
-        *stringRx = gHandle->RXR;
-        ++stringRx;    
-    } while ((uart_RxEmpty()) || (*(stringRx - 1) == '\0'));
 
-    return stringRx;
+void uart_read_stream_rxbuf(uint8_t* stream, size_t size) {
+    for (int i = 0; i < size; ++i) {
+        /* Check if the buffer is not empty */
+        if (gHandle->rxRead_idx < gHandle->rxWrite_idx) {
+            stream[i] = gHandle->rxDataBuf[gHandle->rxRead_idx];
+            ++gHandle->rxRead_idx;
+        } else {
+            gHandle->rxRead_idx = 0;
+            gHandle->rxWrite_idx = 0;
+        }
+    }
+}
+
+
+uint8_t uart_read_data_rxbuf() {
+    uint8_t data;
+
+    /* Check if the buffer is not empty */
+    if (gHandle->rxRead_idx < gHandle->rxWrite_idx) {
+        data = gHandle->rxDataBuf[gHandle->rxRead_idx];
+        ++gHandle->rxRead_idx;
+
+        /* If buffer become empty reset indexes */
+        if (gHandle->rxRead_idx == gHandle->rxWrite_idx) {
+            gHandle->rxRead_idx = 0;
+            gHandle->rxWrite_idx = 0;
+        }
+    } 
+
+    return data;
 }
 
 
@@ -156,43 +140,61 @@ const char* uart_readString() {
 //  TX OPERATION  //
 //----------------//
 
-bool uart_txFull() {
-    return gHandle->FSR & TX_FULL;
-}
 
-
-void uart_sendByte(uint8_t data) {
+void uart_send_data(const uint8_t data) {
     /* Wait until TX FIFO is not full to not lose any data */
-    while (uart_txFull()) { }
+    while (gHandle->device->FSR & TX_FULL) { }
 
     /* Write the parameter in the tx data field */ 
-    gHandle->TXR = data;
+    gHandle->device->TXR = data;
 }
 
 
-void uart_sendByteStream(const uint8_t *stream, size_t size) {
+void uart_send_data_stream(const uint8_t *stream, size_t size) {
     /* Iterate until the last element of the array */
-    while (stream < (stream + size)) {
+    for (int i = 0; i < size; ++i) {
         /* Wait until TX FIFO is not full to not lose any data */
-        while (uart_txFull()) { }
+        while (gHandle->device->FSR & TX_FULL) { }
 
         /* Write in the data tx field the function's parameter */
-        gHandle->TXR = *stream;
-        ++stream;
+        gHandle->device->TXR = stream[i];
     }
 }
 
 
-void uart_sendString(const char *string) {
+void uart_send_string(const char *string) {
+    size_t i = 0;
+
     /* Iterate until the end of the string */
-    while (*string != '\0') {
+    while (string[i] != '\0') {
         /* Wait until TX FIFO is not full to not lose any data */
-        while (uart_txFull()) { }
+        while (gHandle->device->FSR & TX_FULL) { }
 
         /* Write in the data tx field the function's parameter */
-        gHandle->TXR = (uint8_t) *string;
-        ++string;
+        gHandle->device->TXR = (uint8_t) string[i];
     }
+}
+
+
+void uart_fill_stream_txbuf(const uint8_t *stream, const size_t size) {
+    for (int i = 0; i < size; ++i) {
+        if (gHandle->txWrite_idx < TX_UART_BUFFER_SIZE) {
+            gHandle->txDataBuf[gHandle->txWrite_idx] = stream[i];
+            ++gHandle->txWrite_idx;
+        } else {
+            return;
+        }
+    }
+}
+
+
+void uart_fill_data_txbuf(const uint8_t data) {
+    if (gHandle->txWrite_idx < TX_UART_BUFFER_SIZE) {
+        gHandle->txDataBuf[gHandle->txWrite_idx] = data;
+        ++gHandle->txWrite_idx;
+    } else {
+        return;
+    }    
 }
 
 
@@ -201,84 +203,39 @@ void uart_sendString(const char *string) {
 //  UART CONFIGURATION  //
 //----------------------//
 
-uartDataWidth_t uart_getDataWidth() {
-    return (gHandle->STR & DATA_WIDTH);
+void uart_set_configuration(uint8_t dataWidth, uint8_t parityMode, uint8_t stopBits) {
+    uint8_t dataSTR = gHandle->device->STR & (~(STOP_BITS | PARITY_MODE | DATA_WIDTH));
+    dataSTR = ((stopBits << 4) | (parityMode << 2) | dataWidth);
+
+    /* Write configuration */
+    gHandle->device->STR = dataSTR;
 }
 
 
-uartParityMode_t uart_getParityMode() {
-    return (gHandle->STR & PARITY_MODE) >> 2;
+void uart_set_rxdsm(bool dataStreamMode) {
+    gHandle->device->STR = (gHandle->device->STR & ~(RX_DATA_STREAM_MODE)) | (dataStreamMode << 6);
+}
+
+void uart_set_txdsm(bool dataStreamMode) {
+    gHandle->device->STR = (gHandle->device->STR & ~(TX_DATA_STREAM_MODE)) | (dataStreamMode << 7);
 }
 
 
-uartStopBits_t uart_getStopBits() {
-    return (gHandle->STR & STOP_BITS) >> 4;
-}
-
-
-bool uart_getRxDataStreamMode() {
-    return (gHandle->STR & RX_DATA_STREAM_MODE) >> 6;
-}
-
-bool uart_getTxDataStreamMode() {
-    return (gHandle->STR & TX_DATA_STREAM_MODE) >> 6;
-}
-
-
-uint32_t uart_getThresholdBuf() {
-    return (gHandle->FSR & FIFO_THRESHOLD); 
-}
-
-
-void uart_setDataWidth(uartDataWidth_t dataWidth) {
-    gHandle->STR = (gHandle->STR & ~(DATA_WIDTH)) | (dataWidth);
-}
-
-
-void uart_setParityMode(uartParityMode_t parityMode) {
-    gHandle->STR = (gHandle->STR & ~(PARITY_MODE)) | (parityMode << 2);
-}
-
-
-void uart_setStopBits(uartStopBits_t stopBits) {
-    gHandle->STR = (gHandle->STR & ~(STOP_BITS)) | (stopBits << 4);
-}
-
-
-void uart_setRxDataStreamMode(bool dataStreamMode) {
-    gHandle->STR = (gHandle->STR & ~(RX_DATA_STREAM_MODE)) | (dataStreamMode << 6);
-}
-
-void uart_setTxDataStreamMode(bool dataStreamMode) {
-    gHandle->STR = (gHandle->STR & ~(TX_DATA_STREAM_MODE)) | (dataStreamMode << 6);
-}
-
-
-void uart_setThresholdBuf(uint32_t threshold) {
-    if ((threshold >= RX_FIFO_SIZE) || (threshold == 0)) {
+void uart_set_threshold(uint32_t threshold) {
+    if (threshold >= RX_FIFO_SIZE) {
         return;
     }
-    gHandle->STR = (gHandle->STR & ~(FIFO_THRESHOLD)) | threshold;
+    gHandle->device->STR = (gHandle->device->STR & ~(FIFO_THRESHOLD)) | threshold;
 }
 
 
-void uart_setCommunicationMode(uartCommMode_t commMode) {
-    gHandle->STR = (gHandle->STR & ~(COMM_MODE)) | (commMode << 5);
+void uart_set_communication_mode(uint8_t mode){
+    gHandle->device->STR = (gHandle->device->STR & ~(COMM_MODE)) | (mode << 4);
 }
 
 
-uartCommMode_t uart_getCommunicationMode() {
-    return (gHandle->STR & COMM_MODE) >> 5;
-}
-
-
-void uart_setReceivingCfgReq(bool enableRecReq) {
-    gHandle->STR = (gHandle->STR & ~(EN_CFG_REQ)) | (enableRecReq << 4);
-}
-
-
-bool uart_getReceivingCfgReq() {
-    return (gHandle->STR & EN_CFG_REQ) >> 4;
+void uart_enable_config_req(bool enableReq) {
+    gHandle->device->STR = (gHandle->device->STR & ~(EN_CFG_REQ)) | (enableReq << 3);
 }
 
 
@@ -287,28 +244,27 @@ bool uart_getReceivingCfgReq() {
 //  INTERRUPT  //
 //-------------//
 
-void uart_enableIntOverrun(bool enable) {
-    gHandle->ISR = (gHandle->ISR & ~(INT_OVR_EN)) | (enable << 4);
+void uart_enable_int_overrun(bool enable) {
+    gHandle->device->ISR = (gHandle->device->ISR & ~(INT_OVR_EN)) | (enable << 3);
 }
 
 
-void uart_enableIntParity(bool enable) {
-    gHandle->ISR = (gHandle->ISR & ~(INT_PAR_EN)) | (enable << 5);
+void uart_enable_int_parity(bool enable) {
+    gHandle->device->ISR = (gHandle->device->ISR & ~(INT_PAR_EN)) | (enable << 4);
 }
 
 
-void uart_enableIntFrame(bool enable) {
-    gHandle->ISR = (gHandle->ISR & ~(INT_FRM_EN)) | (enable << 6);
+void uart_enable_int_frame(bool enable) {
+    gHandle->device->ISR = (gHandle->device->ISR & ~(INT_FRM_EN)) | (enable << 5);
 }
 
 
-void uart_enableIntRxDRdy(bool enable) {
-    gHandle->ISR = (gHandle->ISR & ~(INT_RXD_EN)) | (enable << 7);
+void uart_enable_int_rxrdy(bool enable) {
+    gHandle->device->ISR = (gHandle->device->ISR & ~(INT_RX_RDY_EN)) | (enable << 6);
 }
 
-
-uint32_t uart_getIntID() {
-    return (gHandle->ISR & INT_ID) >> 1;
+void uart_enable_int_txrdy(bool enable) {
+    gHandle->device->ISR = (gHandle->device->ISR & ~(INT_TX_RDY_EN)) | (enable << 7);
 }
 
 
@@ -317,40 +273,109 @@ uint32_t uart_getIntID() {
  *  the device.
  */ 
 void uart_interruptServiceRoutine() {
-    uartInterruptID_t intID = (uartInterruptID_t) uart_getID();
+    uint8_t intID = gHandle->device->ISR & INT_ID;
     uint8_t trashValue;
 
-    /* Acknowledge interrupt */
-    gHandle->ISR |= INT_ACKN;
-    
-    if (intID == INT_TX_DONE) {
-        return;
-    }else if (intID == INT_CONFIG_FAIL) {
-        gHandle->configFailed = true;
-        return;
-    } else if (intID == INT_OVERRUN) {
-        trashValue = uart_readByte();
-        return;
-    } else if (intID == INT_PARITY) {
-        trashValue = uart_readByte();
-        return;
-    } else if (intID == INT_CONFIG_REQ) {
-        gHandle->CTR |= ACKN_CFG; 
-        return;
-    } else if (intID == INT_RX_FULL) {
-        if (uart_getDataStreamMode()) {
-            gHandle->gDataStrmRxInt = uart_readByteStream(RX_FIFO_SIZE);
-        } else {
-            gHandle->gDataRxInt = uart_readByte();
-        }
-        return;
-    } else if (intID == INT_RXD_RDY) {
-        if (uart_getDataStreamMode()) {
-            gHandle->gDataStrmRxInt = uart_readByteStream(uart_getThresholdBuf());
-        } else {
-            gHandle->gDataRxInt = uart_readByte();
-        }
-        return;
+    switch (intID) {
+        case INT_TX_DONE:
+            /* If the buffer is not empty */
+            if (gHandle->txWrite_idx != 0) {
+                if (gHandle->device->STR & TX_DATA_STREAM_MODE) {
+                    /* Send a stream of bytes and reset the indexes */
+                    uart_send_data_stream(gHandle->txDataBuf, gHandle->txWrite_idx);
+                    gHandle->txWrite_idx = 0;
+                    gHandle->txRead_idx = 0;
+                } else {
+                    /* Send one character */
+                    uart_send_data(gHandle->txDataBuf[gHandle->txRead_idx]);
+                    ++gHandle->txRead_idx;
+
+                    /* If all the data in the buffer has been sent reset the pointers */
+                    if (gHandle->txRead_idx == gHandle->txWrite_idx) {
+                        gHandle->txWrite_idx = 0;
+                        gHandle->txRead_idx = 0;
+                    }
+                }
+            }
+        break;
+
+        case INT_CONFIG_FAIL:
+            /* Update data */
+            gHandle->failedConfig = true;
+        break;
+
+        case INT_OVERRUN:
+            /* Update data */
+            ++gHandle->errors;
+            trashValue = uart_read_data();
+        break;
+
+        case INT_PARITY:
+            /* Update data */
+            ++gHandle->errors;
+            trashValue = uart_read_data();
+        break;
+
+        case INT_FRAME:
+            /* Update data */
+            ++gHandle->errors;
+            trashValue = uart_read_data();
+        break;
+
+        case INT_RXD_RDY:
+            if (gHandle->device->STR & RX_DATA_STREAM_MODE) {
+                /* The cycle runs until the RX fifo is empty */
+                while (!(gHandle->device->FSR & RX_EMPTY)) {
+                    /* If the buffer is not full */
+                    if (gHandle->rxWrite_idx < RX_UART_BUFFER_SIZE) {
+                        /* Write buffer and update index */
+                        gHandle->rxDataBuf[gHandle->rxWrite_idx] = uart_read_data();
+                        ++gHandle->rxWrite_idx;
+                    } else {
+                        break;
+                    }
+                }
+            } else {
+                if (gHandle->rxWrite_idx < RX_UART_BUFFER_SIZE) {
+                    /* Write buffer and update index */
+                    gHandle->rxDataBuf[gHandle->rxWrite_idx] = uart_read_data();
+                    ++gHandle->rxWrite_idx;
+                } else {
+                    break;
+                } 
+            }
+        break;
+
+        case INT_RX_FULL:
+            if (gHandle->device->STR & RX_DATA_STREAM_MODE) {
+                /* The cycle runs until the RX fifo is empty */
+                while (!(gHandle->device->FSR & RX_EMPTY)) {
+                    /* If the buffer is not full */
+                    if (gHandle->rxWrite_idx < RX_UART_BUFFER_SIZE) {
+                        /* Write buffer and update index */
+                        gHandle->rxDataBuf[gHandle->rxWrite_idx] = uart_read_data();
+                        ++gHandle->rxWrite_idx;
+                    } else {
+                        break;
+                    }
+                }
+            } else {
+                if (gHandle->rxWrite_idx < RX_UART_BUFFER_SIZE) {
+                    /* Write buffer and update index */
+                    gHandle->rxDataBuf[gHandle->rxWrite_idx] = uart_read_data();
+                    ++gHandle->rxWrite_idx;
+                } else {
+                    break;
+                } 
+            }
+        break;
+
+        case INT_CONFIG_REQ:
+            /* Acknowledge request */
+            gHandle->device->CTR |= ACK_REQ;
+        break;
+        
+        default: break;
     }
 }
 
