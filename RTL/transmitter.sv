@@ -47,22 +47,22 @@
 module transmitter (
     input  logic         clk_i,
     input  logic         rst_n_i,
-    input  logic         enable,                // From REGISTERS
-    input  logic         ov_baud_rt_i,          // From BAUD RATE
-    input  logic [7:0]   data_tx_i,             // From CU
-    input  logic         tx_fifo_write_i,       // From CU
-    input  logic         config_req_mst_i,      // From REGISTERS
-    input  logic         config_req_slv_i,      // From RECEIVER
-    input  logic         tx_data_stream_mode_i, // From REGISTERS
-    input  logic [1:0]   data_width_i,          // From REGISTERS
-    input  logic [1:0]   stop_bits_number_i,    // From REGISTERS
-    input  logic [1:0]   parity_mode_i,         // From REGISTERS
+    input  logic         enable,                
+    input  logic         ov_baud_rt_i,          
+    input  logic [7:0]   data_tx_i,             
+    input  logic         tx_fifo_write_i,       
+    input  logic         config_req_mst_i,      
+    input  logic         config_req_slv_i,      
+    input  logic         tx_data_stream_mode_i, 
+    input  logic [1:0]   data_width_i,          
+    input  logic [1:0]   stop_bits_number_i,    
+    input  logic [1:0]   parity_mode_i,         
 
-    output logic         tx_o,          // To TOP
-    output logic         tx_done_o,     // To REGISTERS and CONTROL UNIT
-    output logic         req_done_o,    // To CONTROL UNIT
-    output logic         tx_fifo_full_o, // To REGISTERS
-    output logic         tx_idle_o      // To REGISTERS
+    output logic         tx_o,          
+    output logic         tx_done_o,     
+    output logic         req_done_o,    
+    output logic         tx_fifo_full_o, 
+    output logic         tx_idle_o      
 );
 
 //-----------//
@@ -98,7 +98,7 @@ module transmitter (
 
     /* Counter to determine the amount of time the TX line 
      * must stay low during configuration request */
-    logic [$clog2(COUNT_1MS) - 1:0] counter_10ms_CRT, counter_10ms_NXT;
+    logic [$clog2(COUNT_1MS) - 1:0] counter_1ms_CRT, counter_1ms_NXT;
 
     /* Drive the TX line */
     logic tx_line;
@@ -112,18 +112,17 @@ module transmitter (
     /* Number of data bits sended */
     logic [2:0] bits_processed_CRT, bits_processed_NXT; 
 
-        /* Register the output to not lose data */
         always_ff @(posedge clk_i or negedge rst_n_i) begin : data_register
             if (!rst_n_i) begin
                 data_tx_CRT <= 8'b0;
-                counter_10ms_CRT <= 'b0;
+                counter_1ms_CRT <= 'b0;
                 counter_br_CRT <= 4'b0;
                 bits_processed_CRT <= 3'b0;
                 stop_bits_CRT <= 1'b0;
                 tx_o <= TX_LINE_IDLE;
             end else begin 
                 data_tx_CRT <= data_tx_NXT;
-                counter_10ms_CRT <= counter_10ms_NXT;
+                counter_1ms_CRT <= counter_1ms_NXT;
                 counter_br_CRT <= counter_br_NXT;
                 bits_processed_CRT <= bits_processed_NXT;
                 stop_bits_CRT <= stop_bits_NXT;
@@ -160,7 +159,7 @@ module transmitter (
             data_tx_NXT = data_tx_CRT;
             stop_bits_NXT = stop_bits_CRT;
             counter_br_NXT = counter_br_CRT;
-            counter_10ms_NXT = counter_10ms_CRT;
+            counter_1ms_NXT = counter_1ms_CRT;
             bits_processed_NXT = bits_processed_CRT;
 
             tx_line = TX_LINE_IDLE;
@@ -188,16 +187,16 @@ module transmitter (
                 end
 
                 /* 
-                 *  Set tx line to logic 0 for 10ms.  
+                 *  Set tx line to logic 0 for 1ms.  
                  */
                 TX_CFG_REQ: begin 
-                    counter_10ms_NXT = counter_10ms_CRT + 1'b1;
+                    counter_1ms_NXT = counter_1ms_CRT + 1'b1;
                     tx_line = !TX_LINE_IDLE;
 
-                    if (counter_10ms_CRT == COUNT_1MS) begin 
+                    if (counter_1ms_CRT == COUNT_1MS) begin 
                         req_done_o = 1'b1;
                         state_NXT = TX_IDLE;
-                        counter_10ms_NXT = 'b0;
+                        counter_1ms_NXT = 'b0;
                     end
                 end
 

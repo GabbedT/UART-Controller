@@ -28,14 +28,12 @@
 // RELEASE HISTORY
 // VERSION : 1.0 
 // DESCRIPTION : Arbiter for interrupt, it defines which interrupt has to be handled 
-//               first, the interrupt cause signal must be high for only 1 clock cycle. 
-//               After receiving the interrupt cause, the arbiter needs 2 clock cycles 
-//               to signal it trough the IRQ pin. When the interrupt get cleared, 
-//               the arbiter needs to wait another 2 clock cycles before signaling 
-//               another possible interrupt.  
+//               first. After receving the interrupt cause, the IRQ pin will assert
+//               after 1 clock cycle. To clear the pin IREQ pin will be asserted and
+//               a certain instruction will be executed.
 // ------------------------------------------------------------------------------------
-// KEYWORDS : ENABLE INTERRUPT, PRIORITY 1 FIFO, PRIORITY 2 FIFO, PRIORITY 3 FIFO,
-//            PRIORITY SELECTOR, INTERRUPT REQUEST, FSM LOGIC
+// KEYWORDS : ENABLE INTERRUPT, PRIORITY 1 LOGIC, PRIORITY 2 LOGIC, PRIORITY 3 LOGIC,
+//            PRIORITY SELECTOR, FSM LOGIC
 // ------------------------------------------------------------------------------------
 
 `ifndef INTERRUPT_ARBITER_INCLUDE
@@ -46,40 +44,35 @@
 module interrupt_arbiter (
     input  logic       clk_i,
     input  logic       rst_n_i,
-    input  logic       rx_dsm_i,            // From REGISTERS
-    input  logic       disable_interrupts_i, // From CONTROL UNIT
+    input  logic       rx_dsm_i,            
+    input  logic       disable_interrupts_i, 
 
     /* Interrupt cause */
-    input  logic       rx_rdy_i,        // From RECEIVER
-    input  logic       tx_done_i,       // From TRANSMITTER
-    input  logic       config_error_i,  // From CONTROL UNIT
-    input  logic       parity_error_i,  // From RECEIVER
-    input  logic       frame_error_i,   // From RECEIVER
-    input  logic       overrun_error_i, // From RECEIVER
-    input  logic       rx_fifo_full_i,  // From RECEIVER
-    input  logic       config_req_slv_i,// From RECEIVER
+    input  logic       rx_rdy_i,        
+    input  logic       tx_done_i,       
+    input  logic       config_error_i,  
+    input  logic       parity_error_i,  
+    input  logic       frame_error_i,   
+    input  logic       overrun_error_i, 
+    input  logic       rx_fifo_full_i,  
+    input  logic       config_req_slv_i,
 
     /* Enable interrupt */
-    input  logic       overrun_error_en_i,  // From REGISTERS
-    input  logic       frame_error_en_i,    // From REGISTERS
-    input  logic       parity_error_en_i,   // From REGISTERS
-    input  logic       rx_rdy_en_i,         // From REGISTERS
-    input  logic       tx_done_en_i,        // From REGISTERS
+    input  logic       overrun_error_en_i,  
+    input  logic       frame_error_en_i,    
+    input  logic       parity_error_en_i,   
+    input  logic       rx_rdy_en_i,         
+    input  logic       tx_done_en_i,        
 
     /* Interrupt clear */
-    input  logic       int_ackn_i,      // From TOP
-    input  logic       read_rx_data_i,  // From REGISTERS
-    input  logic       rx_fifo_empty_i, // From RECEIVER
+    input  logic       int_ackn_i,      
+    input  logic       read_rx_data_i,  
+    input  logic       rx_fifo_empty_i, 
 
-    output logic [2:0] interrupt_vector_o,      // To REGISTERS
-    output logic       store_int_vect_o,   // To REGISTERS
-    output logic       ireq_n_o                 // To TOP
+    output logic [2:0] interrupt_vector_o,      
+    output logic       store_int_vect_o,  
+    output logic       ireq_n_o                 
 );
-
-    /* Next and current state */
-    localparam NXT = 1;
-    localparam CRT = 0;
-
 
 //--------------------//
 //  ENABLE INTERRUPT  //
@@ -146,7 +139,7 @@ module interrupt_arbiter (
              *    - FRAME ERROR 
              *    - PARITY ERROR
              */
-            casez (p1_int_bundle_CRT)
+            casez (p1_int_bundle_NXT)
                 4'b1???: p1_int_vector = INT_CONFIG_FAIL;
                 4'b01??: p1_int_vector = INT_OVERRUN;
                 4'b001?: p1_int_vector = INT_FRAME;
@@ -156,9 +149,9 @@ module interrupt_arbiter (
         end : prio1_vector_gen
 
 
-//-------------------//
-//  PRIORITY 2 FIFO  //
-//-------------------//
+//--------------------//
+//  PRIORITY 2 LOGIC  //
+//--------------------//
 
     localparam RX_FULL = 1;
     localparam RX_RDY = 0;
@@ -199,7 +192,7 @@ module interrupt_arbiter (
              *    - RECEIVER FIFO FULL
              *    - REQUESTED CONFIGURATION
              */
-            casez (p2_int_bundle_CRT)
+            casez (p2_int_bundle_NXT)
                 2'b1?:   p2_int_vector = INT_RX_FULL;
                 2'b01:   p2_int_vector = INT_RXD_RDY;
                 default: p2_int_vector = 3'b000;
@@ -208,7 +201,7 @@ module interrupt_arbiter (
 
 
 //-------------------//
-//  PRIORITY 3 FIFO  //
+//  PRIORITY 3 LOGIC //
 //-------------------//
 
     localparam CFG_REQ = 1;
@@ -250,7 +243,7 @@ module interrupt_arbiter (
              *    - DATA RECEIVED READY
              *    - TRANSMISSION DONE
              */        
-            casez (p3_int_bundle_CRT)
+            casez (p3_int_bundle_NXT)
                 2'b1?:   p3_int_vector = INT_CONFIG_REQ;
                 2'b01:   p3_int_vector = INT_TX_DONE;
                 default: p3_int_vector = 3'b000;
@@ -313,10 +306,6 @@ module interrupt_arbiter (
             p2_reset = 2'b0;
             p3_reset = 2'b0;
 
-            // p1_enable_load = 1'b0;
-            // p2_enable_load = 1'b0;
-            // p3_enable_load = 1'b0;
-
             interrupt_vector = 3'b0;
             store_int_vect_o = 1'b0;
             
@@ -333,8 +322,8 @@ module interrupt_arbiter (
             case (state_CRT)
 
                 /* 
-                 *  Arbiter doesn't signal any interrupt until a fifo
-                 *  is not empty anymore.
+                 *  Arbiter stays in IDLE state (no interrupt) until the bundles
+                 *  are empty.
                  */
                 IDLE: begin 
                     if (priority_select != 0) begin 
@@ -363,17 +352,17 @@ module interrupt_arbiter (
                  *  Wait for the acknowledge of the first priority interrupt.
                  */
                 PRIO1_WAIT_ACKN: begin 
-                    /* Clear interrupt */
-                    if (int_ackn_i) begin
-                        interrupt_clear = 1'b1;
-                    end
-
+                    p1_reset = 4'b0;
+                    p2_reset[RX_RDY] = 1'b0;
 
                     case (interrupt_vector)
                         INT_CONFIG_FAIL: begin 
                             if (int_ackn_i) begin 
                                 p1_reset[CFG_ERROR] = 1'b1;
                                 state_NXT = PRIO1_CLEAR;
+
+                                /* Clear interrupt */
+                                interrupt_clear = 1'b1;
                             end              
                         end
 
@@ -387,6 +376,9 @@ module interrupt_arbiter (
                                 p1_reset[PAR_ERROR] = 1'b1;
                                 p2_reset[RX_RDY] = 1'b1;
                                 state_NXT = PRIO1_CLEAR;
+
+                                /* Clear interrupt */
+                                interrupt_clear = 1'b1;
                             end 
                         end              
                     endcase
@@ -397,27 +389,20 @@ module interrupt_arbiter (
                  *  Wait for the acknowledge of the second priority interrupt.
                  */
                 PRIO2_WAIT_ACKN: begin 
-                    /* Clear interrupt */
-                    if (int_ackn_i) begin
+                    p2_reset[RX_RDY] = 1'b1;
+                    p2_reset[RX_FULL] = 1'b1;
+
+                    if ((rx_dsm_i & rx_fifo_empty_i) | (!rx_dsm_i & read_rx_data_i)) begin 
+                        case (interrupt_vector)
+                            INT_RX_FULL: p2_reset[RX_FULL] = 1'b1;
+                            INT_RXD_RDY: p2_reset[RX_RDY] = 1'b1;
+                        endcase
+                        
+                        state_NXT = PRIO2_CLEAR;
+
+                        /* Clear interrupt */
                         interrupt_clear = 1'b1;
-                    end
-
-
-                    case (interrupt_vector)
-                        INT_RX_FULL: begin 
-                            if ((rx_dsm_i & rx_fifo_empty_i) | (!rx_dsm_i & read_rx_data_i)) begin 
-                                p2_reset[RX_FULL] = 1'b1;
-                                state_NXT = PRIO2_CLEAR;
-                            end               
-                        end
-
-                        INT_RXD_RDY: begin 
-                            if ((rx_dsm_i & rx_fifo_empty_i) | (!rx_dsm_i & read_rx_data_i)) begin 
-                                p2_reset[RX_RDY] = 1'b1;
-                                state_NXT = PRIO2_CLEAR;
-                            end              
-                        end
-                    endcase
+                    end  
                 end
 
 
@@ -425,27 +410,19 @@ module interrupt_arbiter (
                  *  Wait for the acknowledge of the third priority interrupt.
                  */
                 PRIO3_WAIT_ACKN: begin 
+                    p3_reset[TX_DONE] = 1'b0;
+                    p3_reset[CFG_REQ] = 1'b0;
+
                     /* Clear interrupt */
                     if (int_ackn_i) begin
                         interrupt_clear = 1'b1;
+                        state_NXT = PRIO3_CLEAR;
+
+                        case (interrupt_vector)
+                            INT_CONFIG_REQ: p3_reset[CFG_REQ] = 1'b1;
+                            INT_TX_DONE: p3_reset[TX_DONE] = 1'b1;
+                        endcase
                     end
-
-
-                    case (interrupt_vector)
-                        INT_CONFIG_REQ: begin 
-                            if (int_ackn_i) begin
-                                p3_reset[CFG_REQ] = 1'b1;
-                                state_NXT = PRIO3_CLEAR;
-                            end 
-                        end
-
-                        INT_TX_DONE: begin
-                            if (int_ackn_i) begin 
-                                p3_reset[TX_DONE] = 1'b1;
-                                state_NXT = PRIO3_CLEAR;
-                            end
-                        end              
-                    endcase
                 end
 
 

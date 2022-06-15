@@ -49,47 +49,43 @@ module control_unit (
     input  logic         clk_i,         
     
     /* Data */
-    input  data_packet_u data_rx_i,     // From RECEIVER
-    input  logic [7:0]   data_tx_i,     // From REGISTERS
+    input  data_packet_u data_rx_i,     
+    input  logic [7:0]   data_tx_i,     
     
     /* Transmitter */
-    input  logic         tx_done_i,     // From TRANSMITTER
-    input  logic         req_done_i,    // From TRANSMITTER
-    
-    /* Error detection */
-    input  logic         parity_i,      // From RECEIVER
+    input  logic         tx_done_i,     
+    input  logic         req_done_i,       
     
     /* FIFO status */ 
-    input  logic         rx_fifo_empty_i,   // From RECEIVER 
-    input  logic         rx_fifo_read_i,    // From RECEIVER
+    input  logic         rx_fifo_empty_i,    
+    input  logic         rx_fifo_read_i,    
     input  logic         tx_fifo_full_i,
-    input  logic         tx_fifo_write_i,   // From TRANSMITTER
+    input  logic         tx_fifo_write_i,   
     
     /* Configuration */
     input  logic         request_ack_i,
-    input  logic         enable_config_receive_i,   // From REGISTERS
-    input  logic         config_req_slv_i,          // From RECEIVER 
-    input  logic         config_req_mst_i,          // From REGISTERS
-    input  uart_config_s config_i,                  // From REGISTERS
-    input  uart_config_s updated_config_i,          // From REGISTERS
+    input  logic         enable_config_receive_i,   
+    input  logic         config_req_slv_i,           
+    input  logic         config_req_mst_i,          
+    input  uart_config_s config_i,                  
+    input  uart_config_s updated_config_i,          
 
-    output logic         STR_en_o,                  // To REGISTERS
-    output uart_config_s config_o,                  // To REGISTERS
-    output logic         config_req_mst_o,          // To TRANSMITTER
-    output logic         set_std_config_o,          // To REGISTERS
-    output logic         config_done_o,             // To REGISTERS    
-    output logic         disable_global_int_o,      // To TOP and INTERRUPT ARBITER          
+    output logic         STR_en_o,                  
+    output uart_config_s config_o,                  
+    output logic         config_req_mst_o,          
+    output logic         set_std_config_o,          
+    output logic         config_done_o,                 
+    output logic         disable_global_int_o,               
     
     /* FIFO operations */
-    output logic         rx_fifo_read_o,            // To RECEIVER
-    output logic         tx_fifo_write_o,           // To TRANSMITTER
+    output logic         rx_fifo_read_o,            
+    output logic         tx_fifo_write_o,          
     
     /* Data */
-    output logic [7:0]   data_tx_o,                 // To TRANSMITTER
+    output logic [7:0]   data_tx_o,               
     
     /* Error */
-    output logic         config_error_o,    // To INTERRUPT ARBITER
-    output logic         parity_error_o     // To INTERRUPT ARBITER
+    output logic         config_error_o   
 );
 
 //------------//
@@ -139,6 +135,35 @@ module control_unit (
         end : datapath_register
 
 
+    /* Saved configuration during slave configuration process */
+    uart_config_s configuration_slv_CRT, configuration_slv_NXT;
+    logic data_width_load, parity_mode_load, stop_bits_number_load;
+
+        always_ff @(posedge clk_i or negedge rst_n_i) begin
+            if (!rst_n_i) begin
+                configuration_slv_CRT.data_width <= 2'b0;
+            end else if (data_width_load) begin
+                configuration_slv_CRT.data_width <= configuration_slv_NXT.data_width;
+            end
+        end
+
+        always_ff @(posedge clk_i or negedge rst_n_i) begin
+            if (!rst_n_i) begin
+                configuration_slv_CRT.parity_mode <= 2'b0;
+            end else if (parity_mode_load) begin
+                configuration_slv_CRT.parity_mode <= configuration_slv_NXT.parity_mode;
+            end
+        end
+
+        always_ff @(posedge clk_i or negedge rst_n_i) begin
+            if (!rst_n_i) begin
+                configuration_slv_CRT.stop_bits <= 2'b0;
+            end else if (stop_bits_number_load) begin
+                configuration_slv_CRT.stop_bits <= configuration_slv_NXT.stop_bits;
+            end
+        end
+
+
 //-------------//
 //  FSM LOGIC  //
 //-------------//
@@ -169,6 +194,7 @@ module control_unit (
             config_failed_NXT = config_failed_CRT;
             config_packet_type_NXT = config_packet_type_CRT;
             syn_data_cnt_NXT = syn_data_cnt_CRT;
+            configuration_slv_NXT = configuration_slv_CRT;
 
             /* Configuration signals */
             STR_en_o = 1'b0;
@@ -177,6 +203,9 @@ module control_unit (
             config_error_o = 1'b0;
             config_done_o = 1'b0;
             set_std_config_o = 1'b0;
+            data_width_load = 1'b0;
+            parity_mode_load = 1'b0;
+            stop_bits_number_load = 1'b0;
 
             /* During configuration process, the interrupts are disabled */
             disable_global_int_o = 1'b1;
@@ -191,7 +220,7 @@ module control_unit (
             case (state_CRT)
 
                 /*
-                 *  Setup the standard configuration.
+                 *  Set the standard configuration.
                  */
                 STD_CONFIG: begin 
                     set_std_config_o = 1'b1;
@@ -222,9 +251,8 @@ module control_unit (
                 end
 
                 /*
-                 *  This state just send a configuration request to the transmitter which will set
-                 *  the TX line to a non IDLE state for 10ms. Go to the next stage only if the 
-                 *  transmitter has finished requesting.
+                 *  In this state, the device sends 3 SYN characters to the other device, after that
+                 *  sends the configuration signal by lowering the TX line (non IDLE state) for 1ms
                  */
                 CFG_REQ_MST: begin
                     /* Send 3 SYN characters */
@@ -240,7 +268,7 @@ module control_unit (
 
                 /*
                  *  The device waits for the other device to acknowledge the configuration request. 
-                 *  It needs to receive an acknowledgement packet within 10ms otherwise the device will
+                 *  It needs to receive an acknowledge packet within 10ms otherwise the device will
                  *  send another request. The process repeat for three times at the most, then the 
                  *  configuration will be considered failed and the device setted with the standard
                  *  configuration. 
@@ -286,7 +314,7 @@ module control_unit (
 
 
                 /* 
-                 *  Wait transmitter to finsish sending data 
+                 *  Wait the transmitter to finish sending data 
                  */
                 WAIT_TX_MST: begin 
                     /* Go to the next state only if the transmitter has finished sending the packet */
@@ -298,8 +326,7 @@ module control_unit (
 
                 /*
                  *  The device is waiting for the slave acknowledgment, the fifo must be empty. 
-                 *  Enable data stream mode so the device doesn't interrupt everytime it receive a packet.
-                 *  If in 50ms the device doesn't get any acknowledgment packet, raise a configuration error.
+                 *  If in 10ms the device doesn't get any acknowledgment packet, raise a configuration error.
                  *  If a non acknowledgment packet is received, it will simply be ignored.
                  */
                 WAIT_ACKN_MST: begin
@@ -330,7 +357,7 @@ module control_unit (
                 /*
                  *  The device waits for configuration packets. The fifo needs to be empty so other data packets
                  *  won't be considered as configuration packets. For every packet received, the device must send
-                 *  an acknowledgment. 
+                 *  an acknowlede. 
                  */
                 WAIT_CFG_PKT_SLV: begin 
                     rx_fifo_read_o = !rx_fifo_empty_i;
@@ -342,13 +369,23 @@ module control_unit (
                         if (!rx_fifo_empty_i) begin
                             config_packet_type_NXT = config_packet_type_CRT + 1'b1;
                             state_NXT = SEND_ACKN_SLV;
-                            STR_en_o = 1'b1;
                         end
 
                         case (data_rx_i.cfg_packet.id)
-                            DATA_WIDTH_ID:        config_o.data_width = data_rx_i.cfg_packet.option;
-                            PARITY_MODE_ID:       config_o.parity_mode = data_rx_i.cfg_packet.option;
-                            STOP_BITS_ID:         config_o.stop_bits = data_rx_i.cfg_packet.option;
+                            DATA_WIDTH_ID:  begin
+                                configuration_slv_NXT.data_width = data_rx_i.cfg_packet.option;
+                                data_width_load = 1'b1;
+                            end
+
+                            PARITY_MODE_ID:  begin
+                                configuration_slv_NXT.parity_mode = data_rx_i.cfg_packet.option;
+                                parity_mode_load = 1'b1;
+                            end
+
+                            STOP_BITS_ID:  begin 
+                                configuration_slv_NXT.stop_bits = data_rx_i.cfg_packet.option;
+                                stop_bits_number_load = 1'b1;
+                            end
                         endcase
                     end else begin 
                         state_NXT = STD_CONFIG;
@@ -360,7 +397,7 @@ module control_unit (
                  *  The device will send an acknowledgment packet to continue the configuration process
                  */
                 SEND_ACKN_SLV: begin           
-                    /* Send ackowledge packet */
+                    /* Send acknowledge packet */
                     tx_fifo_write_o = 1'b1;
                     data_tx_o = ACKN_PKT;
                     state_NXT = WAIT_TX_SLV;
@@ -373,8 +410,10 @@ module control_unit (
                     /* Go to the next state only if the transmitter has finished sending the packet */
                     if (tx_done_i) begin 
                         if (config_packet_type_CRT == EC_TYPE) begin 
+                            /* Write the final configuration */
                             state_NXT = MAIN;
-                            config_done_o = 1'b1;
+                            STR_en_o = 1'b1;
+                            config_o = configuration_slv_CRT;
                         end else begin 
                             state_NXT = WAIT_CFG_PKT_SLV;
                         end
@@ -383,40 +422,6 @@ module control_unit (
 
             endcase
         end : fsm_next_state_logic
-
-
-//-------------------------//
-//  ERROR DETECTION LOGIC  //
-//-------------------------//
-
-    logic parity, parity_error;
-
-        always_comb begin : parity_detection_logic
-
-            /*
-             *  There are two types of parity checking: EVEN and ODD. Both are 
-             *  computed by XORing every bit of the data, the difference 
-             *  resides in the last bit XORed: 
-             *  EVEN: parity ^ 0
-             *  ODD:  parity ^ 1
-             */
-            
-            case (config_i.data_width)
-                DW_5BIT:  parity = ^data_rx_i[4:0];
-                DW_6BIT:  parity = ^data_rx_i[5:0];
-                DW_7BIT:  parity = ^data_rx_i[6:0];
-                DW_8BIT:  parity = ^data_rx_i;
-            endcase
-
-            /* Select ODD or EVEN parity */
-            case (config_i.parity_mode)
-                EVEN:    parity_error = parity_i != (parity ^ 1'b0);
-                ODD:     parity_error = parity_i != (parity ^ 1'b1);
-                default: parity_error = 1'b0;
-            endcase
-        end : parity_detection_logic
-
-    assign parity_error_o = parity_error;
 
 endmodule : control_unit
 

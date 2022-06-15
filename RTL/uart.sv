@@ -6,9 +6,15 @@ module uart (
     input  logic       chip_sel_n_i,
     input  logic [2:0] address_i,
     input  logic       read_write_i,
-    inout  logic [7:0] data_io,
     input  logic       rx_i,
     input  logic       iack_i,
+
+    `ifdef FPGA 
+        input  logic [7:0] data_i,
+        output logic [7:0] data_o,
+    `else 
+        inout  logic [7:0] data_io,
+    `endif
 
     output logic       tx_o,
     output logic       ireq_n_o    
@@ -88,7 +94,6 @@ module uart (
 
     logic [7:0]   data_rx, data_TXR;
     logic         tx_done, req_done;
-    logic         parity;
     logic         rx_fifo_empty, rx_fifo_read, tx_fifo_write, tx_fifo_full;
     logic         config_request_acknowledged;
     logic         enable_configuration;
@@ -110,7 +115,6 @@ module uart (
         .data_tx_i               ( data_TXR                    ),
         .tx_done_i               ( tx_done                     ),
         .req_done_i              ( req_done                    ),
-        .parity_i                ( parity                      ),
         .rx_fifo_empty_i         ( rx_fifo_empty               ),
         .rx_fifo_read_i          ( rx_read                     ),
         .tx_fifo_write_i         ( tx_write                    ),
@@ -130,8 +134,7 @@ module uart (
         .rx_fifo_read_o          ( rx_fifo_read                ),
         .tx_fifo_write_o         ( tx_fifo_write               ),
         .data_tx_o               ( data_tx                     ),
-        .config_error_o          ( configuration_error         ),
-        .parity_error_o          ( parity_error                )
+        .config_error_o          ( configuration_error         )
     );
 
 
@@ -195,7 +198,7 @@ module uart (
         .config_req_slv_o      ( configuration_received            ),
         .overrun_error_o       ( overrun_error                     ),
         .frame_error_o         ( frame_error                       ),
-        .parity_o              ( parity                            ),
+        .parity_error_o        ( parity_error                      ),
         .rx_data_ready_o       ( data_rx_ready                     ),
         .data_rx_o             ( data_rx                           ),
         .rx_idle_o             ( rx_idle                           )  
@@ -254,7 +257,14 @@ module uart (
         .read_i                   ( read                              ),
         .write_i                  ( write                             ),
         .address_i                ( address_i                         ),
-        .data_io                  ( data_io                           ),
+        
+        `ifdef FPGA 
+            .data_i               ( data_i                            ),
+            .data_o               ( data_o                            ),
+        `else 
+            .data_io              ( data_io                           ),
+        `endif 
+
         .tx_enable_o              ( tx_enable                         ),
         .rx_enable_o              ( rx_enable                         ),
         .int_ackn_i               ( int_ack                           ),

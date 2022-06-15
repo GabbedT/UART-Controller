@@ -1,3 +1,38 @@
+// MIT License
+//
+// Copyright (c) 2021 Gabriele Tripi
+// 
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+// 
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+// ------------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------
+// FILE NAME : configuration_registers.sv
+// AUTHOR : Gabriele Tripi
+// AUTHOR'S EMAIL : tripi.gabriele2002@gmail.com
+// ------------------------------------------------------------------------------------
+// RELEASE HISTORY
+// VERSION : 1.0 
+// DESCRIPTION : This module contains the set of registers that controls the UART, they
+//               can all be accessed by the programmer.
+// ------------------------------------------------------------------------------------
+// KEYWORDS : STR, DVR, CTR, ISR, RXR, TXR, DECODER, DATA BUS
+// ------------------------------------------------------------------------------------
+
 `ifndef CONFIGURATION_REGISTERS_INCLUDE
     `define CONFIGURATION_REGISTERS_INCLUDE
 
@@ -9,10 +44,17 @@ module configuration_registers (
     input  logic        rst_n_i,  
     input  logic        read_i,              
     input  logic        write_i,            
-    input  logic [2:0]  address_i,          
-    inout  logic [7:0]  data_io,            
+    input  logic [2:0]  address_i,                     
     input  logic        STR_en_i,           
-    input  logic        set_std_config_i,   
+    input  logic        set_std_config_i,  
+
+    /* BUS */
+    `ifdef FPGA 
+        input  logic [7:0] data_i,
+        output logic [7:0] data_o,
+    `else 
+        inout  logic [7:0] data_io,
+    `endif 
     
     /* STR */
     input  logic [1:0]  data_width_i,   
@@ -68,7 +110,7 @@ module configuration_registers (
 
     /* TXR */
     output logic [7:0]  tx_data_o,  
-    output logic        tx_fifo_write_o 
+    output logic        tx_fifo_write_o
 ); 
 
     /* Enable writing into registers */
@@ -90,13 +132,17 @@ module configuration_registers (
             end else if (set_std_config_i | std_config) begin 
                 STR_data <= {2'b0, STD_CONFIGURATION};
             end else if (STR_en_i & enable_config_req) begin 
-                /* The controller is writing */
+                /* The control unit is writing (SLAVE configuration) */
                 STR_data.DWID <= data_width_i;
                 STR_data.PMID <= parity_mode_i;
                 STR_data.SBID <= stop_bits_i;
             end else if (enable.STR) begin 
                 /* The CPU is writing */
-                STR_data <= data_io;
+                `ifdef FPGA 
+                    STR_data <= data_i;
+                `else 
+                    STR_data <= data_io;
+                `endif
             end
         end : STR_WR
 
@@ -114,11 +160,11 @@ module configuration_registers (
         .edge_pulse_o ( config_done          )
     );
 
-        /* Since the device must not change immediatly the configuration
-         * state but only after the configuration process, store the old
+        /* Since configuration state of the device must not change immediately 
+         * but only after the configuration process, store the old
          * configuration in the register which is used to drive the 
          * modules configuration information. Update the configuration 
-         * when the process has ended */
+         * when the process has ended (when the device is MASTER) */
         always_ff @(posedge clk_i or negedge rst_n_i) begin : config_register
             if (!rst_n_i) begin
                 data_width <= STD_DATA_WIDTH;
@@ -132,7 +178,12 @@ module configuration_registers (
                 data_width <= STR_data.DWID;
                 parity_mode <= STR_data.PMID;
                 stop_bits <= STR_data.SBID;          
-            end
+            end else if (STR_en_i & enable_config_req) begin 
+                /* The control unit is writing (SLAVE configuration) */
+                data_width <= data_width_i;
+                parity_mode <= parity_mode_i;
+                stop_bits <= stop_bits_i;
+            end 
         end : config_register
 
     assign tx_dsm_o = STR_data.TDSM;
@@ -168,9 +219,17 @@ module configuration_registers (
             end else if (set_std_config_i | std_config) begin 
                 DVR_data <= STD_DIVISOR;
             end else if (enable.LDVR) begin 
-                DVR_data[LOWER] <= data_io;
+                `ifdef FPGA 
+                    DVR_data[LOWER] <= data_i;
+                `else 
+                    DVR_data[LOWER] <= data_io;
+                `endif
             end else if (enable.UDVR) begin 
-                DVR_data[UPPER] <= data_io;
+                `ifdef FPGA 
+                    DVR_data[UPPER] <= data_i;
+                `else 
+                    DVR_data[UPPER] <= data_io;
+                `endif
             end
         end : DVR_WR
 
@@ -218,7 +277,11 @@ module configuration_registers (
             if (!rst_n_i) begin 
                 FSR_data.RX_TRESHOLD <= 6'b0;
             end else if (enable.FSR) begin 
-                FSR_data.RX_TRESHOLD <= data_io[5:0];
+                `ifdef FPGA 
+                    FSR_data.RX_TRESHOLD <= data_i[5:0];
+                `else 
+                    FSR_data.RX_TRESHOLD <= data_io[5:0];
+                `endif
             end  
         end : FSR_WR
 
@@ -252,9 +315,15 @@ module configuration_registers (
                 CTR_data.COM   <= STD_COMM_MODE;
                 CTR_data.ENREQ <= 1'b1;                
             end else if (enable.CTR) begin 
-                CTR_data.VECTORED <= data_io[6];
-                CTR_data.COM   <= data_io[4:3];
-                CTR_data.ENREQ <= data_io[2];
+                `ifdef FPGA 
+                    CTR_data.VECTORED <= data_i[6];
+                    CTR_data.COM   <= data_i[4:3];
+                    CTR_data.ENREQ <= data_i[2];
+                `else
+                    CTR_data.VECTORED <= data_io[6];
+                    CTR_data.COM   <= data_io[4:3];
+                    CTR_data.ENREQ <= data_io[2];
+                `endif
             end 
         end : CTR_WR
 
@@ -281,7 +350,11 @@ module configuration_registers (
             end else if (set_std_cfg_rst) begin 
                 CTR_data.STDC <= 1'b0;
             end else if (enable.CTR) begin
-                CTR_data.STDC <= data_io[0];
+                `ifdef FPGA 
+                    CTR_data.STDC <= data_i[0];
+                `else
+                    CTR_data.STDC <= data_io[0];
+                `endif
             end 
         end
 
@@ -314,11 +387,19 @@ module configuration_registers (
                 ISR_data.PAR    <= 1'b1;
                 ISR_data.OVR    <= 1'b1;
             end else if (enable.ISR) begin 
-                ISR_data.TXDONE <= data_io[6];
-                ISR_data.RXRDY  <= data_io[6];
-                ISR_data.FRM    <= data_io[5];
-                ISR_data.PAR    <= data_io[4];
-                ISR_data.OVR    <= data_io[3];
+                `ifdef FPGA 
+                    ISR_data.TXDONE <= data_i[6];
+                    ISR_data.RXRDY  <= data_i[6];
+                    ISR_data.FRM    <= data_i[5];
+                    ISR_data.PAR    <= data_i[4];
+                    ISR_data.OVR    <= data_i[3];
+                `else
+                    ISR_data.TXDONE <= data_io[6];
+                    ISR_data.RXRDY  <= data_io[6];
+                    ISR_data.FRM    <= data_io[5];
+                    ISR_data.PAR    <= data_io[4];
+                    ISR_data.OVR    <= data_io[3];
+                `endif
             end
         end : ISR_WR
 
@@ -342,18 +423,30 @@ module configuration_registers (
 //  RXR REGISTER  //
 //----------------//
 
+    logic rx_fifo_empty_edge;
+
+    edge_detector #(0) empty_fifo_negedge (
+        .clk_i        ( clk_i              ),
+        .signal_i     ( rx_fifo_empty_i    ),
+        .edge_pulse_o ( rx_fifo_empty_edge )
+    );
+
+
     logic [7:0] RXR_data;
+    logic rx_fifo_read;
 
         always_ff @(posedge clk_i or negedge rst_n_i) begin : RXR_WR
             if (!rst_n_i) begin
                 RXR_data <= 8'b0;
-            end else begin
+            end else if (rx_fifo_read) begin
                 RXR_data <= rx_data_i;
             end
         end : RXR_WR
 
-    /* Should be high for 1 clock cycle */
-    assign rx_fifo_read_o = (read_i & (address_i == RXR_ADDR));
+    /* Should be high for 1 clock cycle, the register must be loaded when the fifo is not empty
+     * anymore so a read will return a valid value */
+    assign rx_fifo_read = (!rx_fifo_empty_i & read_i & (address_i == RXR_ADDR)) | rx_fifo_empty_edge;
+    assign rx_fifo_read_o = rx_fifo_read;
 
 
 //----------------//
@@ -366,7 +459,11 @@ module configuration_registers (
             if (!rst_n_i) begin
                 TXR_data <= 8'b0;
             end else if (enable.TXR) begin
-                TXR_data <= data_io;
+                `ifdef FPGA 
+                    TXR_data <= data_i;
+                `else 
+                    TXR_data <= data_io;
+                `endif
             end
         end
 
@@ -447,8 +544,12 @@ module configuration_registers (
             data = data_register;
         end
     end
-        
-    assign data_io = (read_i) ? data : 8'bZ;
+
+    `ifdef FPGA 
+        assign data_o = data;
+    `else  
+        assign data_io = (read_i) ? data : 8'bZ;
+    `endif 
 
 endmodule : configuration_registers
 

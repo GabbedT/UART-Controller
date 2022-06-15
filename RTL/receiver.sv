@@ -65,7 +65,7 @@ module receiver (
     output logic         config_req_slv_o,      
     output logic         overrun_error_o,       
     output logic         frame_error_o,         
-    output logic         parity_o,             
+    output logic         parity_error_o,             
     output logic         rx_data_ready_o,             
     output logic [7:0]   data_rx_o,              
     output logic         rx_idle_o              
@@ -76,9 +76,9 @@ module receiver (
 //--------------//
 
     /* Index in fifo data */
-    localparam FRAME = 9;
-    localparam OVERRUN = 10;
-    localparam PARITY_BIT = 8;
+    localparam FRAME = 8;
+    localparam OVERRUN = 9;
+    localparam PARITY = 10;
 
 
 //-----------//
@@ -240,7 +240,7 @@ module receiver (
         end : fsm_state_register
 
 
-    /* Data ready interrupt logic */
+    /* Data ready interrupt */
     logic data_ready;
 
         always_comb begin 
@@ -257,8 +257,8 @@ module receiver (
             syn_data_cnt_NXT = syn_data_cnt_CRT;
             stop_bits_cnt_NXT = stop_bits_cnt_CRT;
             bits_processed_NXT = bits_processed_CRT;
+            cfg_req_NXT = cfg_req_CRT;  
 
-            cfg_req_NXT = 1'b0;  
             rx_idle_o = 1'b0;   
             fifo_write = 1'b0;  
             fifo_rst_n = 1'b1;  
@@ -289,11 +289,9 @@ module receiver (
                     /* Could be a false request, recover from it */
                     if (rx_i == RX_LINE_IDLE) begin 
                         state_NXT = RX_IDLE;
-                    end
-
-                    /* Go in IDLE then wait the request. The master won't initiate
-                    * other transaction until the request is acknowledged */
-                    if (counter_1ms_CRT == COUNT_1MS) begin 
+                    end else if (counter_1ms_CRT == COUNT_1MS) begin 
+                        /* Go in IDLE then wait the request. The master won't initiate
+                         * other transaction until the request is acknowledged */
                         cfg_req_NXT = 1'b1;
                         state_NXT = RX_IDLE;
 
@@ -304,7 +302,7 @@ module receiver (
 
                 /* 
                  *  Sample the start bit in T/2 time (T is the bit while the
-                 *  bit is stable) to grant maximum signal stability.
+                 *  bit is stable) to grant maximum signal integrity.
                  */
                 RX_START: begin 
                     if (ov_baud_rt_i) begin 
@@ -322,7 +320,7 @@ module receiver (
                 /* 
                  *  Sample data bits. Since in the START state the counter stopped
                  *  at half of the bit and then switched state, now every time the
-                 *  counter reach T, it is in the middle of the start bit. The LSB
+                 *  counter reach T, it is in the middle of the data bit. The LSB
                  *  is received first.
                  */
                 RX_SAMPLE: begin 
@@ -335,8 +333,8 @@ module receiver (
                             bits_processed_NXT = bits_processed_CRT + 1'b1;
 
                             /* Place the bit in the MSB of the data register,
-                            * in the next clock cycle it will be shifted to 
-                            * the right */
+                             * in the next clock cycle it will be shifted to 
+                             * the right */
                             data_rx_NXT = {rx_i, data_rx_CRT[7:1]};
 
                             if (parity_mode_i[1]) begin
@@ -404,7 +402,7 @@ module receiver (
                         end
                     end
 
-                    if (state_NXT == IDLE) begin
+                    if (state_NXT == RX_IDLE) begin
                         if (data_rx_CRT == SYN) begin 
                             syn_data_cnt_NXT = syn_data_cnt_CRT + 1'b1;
                         end else begin
@@ -430,15 +428,8 @@ module receiver (
                 end else begin 
                     data_ready = 1'b1;
                 end
-
-                // if (data_rx_CRT == SYN) begin 
-                //     syn_data_cnt_NXT = syn_data_cnt_CRT + 1'b1;
-                // end else begin
-                //     syn_data_cnt_NXT = 'b0;
-                // end
             end else begin
                 data_ready = 1'b0;
-                // syn_data_cnt_NXT = syn_data_cnt_CRT;
             end
         end : rx_done_interrupt_logic
 
@@ -452,35 +443,58 @@ module receiver (
                 DW_7BIT: fifo_data_write[7:0] = {1'b0, data_rx_CRT[7:1]};
                 DW_8BIT: fifo_data_write[7:0] = data_rx_CRT[7:0];
             endcase
-    
-            case (parity_mode_i)
-                EVEN:    fifo_data_write[PARITY_BIT] = parity_bit_CRT ^ 1'b0;
-                ODD:     fifo_data_write[PARITY_BIT] = parity_bit_CRT ^ 1'b1;
-                default: fifo_data_write[PARITY_BIT] = 1'b0;
-            endcase
 
             /* AND the stop bits with the RX line: if the first stop bits was 0
              * then 'stop_bits_CRT' would be 0 too generating a frame error. 
-             * The same goes for the single stop bit. If uart is receiving 0x00
-             * then frame error is disabled */
-            fifo_data_write[FRAME] = !(stop_bits_CRT & rx_i);
+             * The same goes for the single stop bit.  */
+            fifo_data_write[FRAME] = (state_CRT == RX_DONE) & !rx_i;
 
-            /* Raise an overrun error if the fifo has reached the threshold level or
-             * the data has been received and the device is receiving other data */
-            fifo_data_write[OVERRUN] = data_ready & (state_CRT != RX_IDLE);
+            /* Raise an overrun error if the fifo is full and new data is arriving */
+            fifo_data_write[OVERRUN] = fifo_full & (state_CRT != RX_IDLE);
         end : fifo_write_data_assignment
 
     /* Output assignment */
     assign data_rx_o = (rx_fifo_read_i) ? fifo_data_read[7:0] : 8'b0;
     assign rx_data_ready_o = data_ready;
 
+    /* If the threshold is set to 0 and DSM is active, the signal 'rx_data_ready_o' already signal the fifo being full. */
+    assign rx_fifo_full_o = (rx_data_stream_mode_i & (threshold_i == 6'b0)) ? 1'b0 : fifo_full;
+
+//-------------------------//
+//  ERROR DETECTION LOGIC  //
+//-------------------------//
+
+    logic parity;
+
+        always_comb begin : parity_detection_logic
+
+            /*
+             *  There are two types of parity checking: EVEN and ODD. Both are 
+             *  computed by XORing every bit of the data, the difference 
+             *  resides in the last bit XORed: 
+             *  EVEN: parity ^ 0
+             *  ODD:  parity ^ 1
+             */
+            
+            case (data_width_i)
+                DW_5BIT:  parity = ^data_rx_CRT[4:0];
+                DW_6BIT:  parity = ^data_rx_CRT[5:0];
+                DW_7BIT:  parity = ^data_rx_CRT[6:0];
+                DW_8BIT:  parity = ^data_rx_CRT;
+            endcase
+
+            /* Select ODD or EVEN parity */
+            case (parity_mode_i)
+                EVEN:    fifo_data_write[PARITY] = parity_bit_CRT != (parity ^ 1'b0);
+                ODD:     fifo_data_write[PARITY] = parity_bit_CRT != (parity ^ 1'b1);
+                default: fifo_data_write[PARITY] = 1'b0;
+            endcase
+        end : parity_detection_logic
+
     /* Should be asserted for only 1 clock cycle */
     assign frame_error_o = fifo_data_read[FRAME] & rx_fifo_read_i;
     assign overrun_error_o = fifo_data_read[OVERRUN] & rx_fifo_read_i;
-    assign parity_o = fifo_data_read[PARITY_BIT] & rx_fifo_read_i;
-
-    /* If the threshold is set to 0 and DSM is active, the signal 'rx_data_ready_o' already signal the fifo being full. */
-    assign rx_fifo_full_o = (rx_data_stream_mode_i & (threshold_i == 6'b0)) ? 1'b0 : fifo_full;
+    assign parity_error_o = fifo_data_read[PARITY] & rx_fifo_read_i;
 
 endmodule : receiver
 

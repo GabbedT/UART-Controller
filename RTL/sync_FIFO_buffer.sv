@@ -34,8 +34,7 @@
 //               The operation are: READ and WRITE, it's possible to simultaneusly
 //               read and write. The "read_i" signal mustn't be asserted when the signal
 //               "empty_o" is true and the "write_i" signal mustn't be asserted when the
-//               signal "full_o" is true. Note that empty/full signal are asserted 
-//               immediatly as the control signal arrives, not in the next clock cycle!
+//               signal "full_o" is true. 
 //
 //               Source code: https://github.com/GabbedT/FIFO
 // ------------------------------------------------------------------------------------
