@@ -88,7 +88,8 @@ module configuration_registers (
     input  logic        int_pending_i,     
     
     output logic        enable_configuration_o,     
-    output logic        send_configuration_req_o,   
+    output logic        send_configuration_req_o,  
+    output logic        acknowledge_request_o, 
     output logic        tx_enable_o,               
     output logic        rx_enable_o,               
 
@@ -96,8 +97,7 @@ module configuration_registers (
     input  logic        int_ackn_i, 
     input  logic [2:0]  interrupt_vector_i, 
     input  logic        interrupt_vector_en_i, 
-
-    output logic        req_ackn_o, 
+ 
     output logic        tx_done_en_o,  
     output logic        rx_rdy_en_o,   
     output logic        frame_error_en_o,  
@@ -304,12 +304,10 @@ module configuration_registers (
 
     CTR_data_t CTR_data;
 
-    logic set_std_config;
-
         always_ff @(posedge clk_i or negedge rst_n_i) begin : CTR_WR
             if (!rst_n_i) begin   
                 CTR_data.VECTORED <= 1'b0;
-                CTR_data.COM   <= STD_COMM_MODE;
+                CTR_data.COM <= STD_COMM_MODE;
                 CTR_data.ENREQ <= 1'b1;
             end else if (set_std_config_i | std_config) begin 
                 CTR_data.COM   <= STD_COMM_MODE;
@@ -317,15 +315,16 @@ module configuration_registers (
             end else if (enable.CTR) begin 
                 `ifdef FPGA 
                     CTR_data.VECTORED <= data_i[6];
-                    CTR_data.COM   <= data_i[4:3];
+                    CTR_data.COM <= data_i[4:3];
                     CTR_data.ENREQ <= data_i[2];
                 `else
                     CTR_data.VECTORED <= data_io[6];
-                    CTR_data.COM   <= data_io[4:3];
+                    CTR_data.COM <= data_io[4:3];
                     CTR_data.ENREQ <= data_io[2];
                 `endif
             end 
         end : CTR_WR
+
 
     assign std_config = CTR_data.STDC;
 
@@ -335,42 +334,35 @@ module configuration_registers (
                 CTR_data.INTPEND <= 1'b0;
             end else begin 
                 CTR_data.CDONE <= configuration_done_i;
-                CTR_data.INTPEND <= int_pending_i;
+                CTR_data.INTPEND <= !int_pending_i;
             end
         end : CTR_R
 
     assign enable_config_req = CTR_data.ENREQ;
 
-    /* Reset set standard configuration signal everytime it's asserted */
-    logic set_std_cfg_rst;
 
         always_ff @(posedge clk_i or negedge rst_n_i) begin 
             if (!rst_n_i) begin
                 CTR_data.STDC <= 1'b0;
-            end else if (set_std_cfg_rst) begin 
-                CTR_data.STDC <= 1'b0;
+                CTR_data.AKREQ <= 1'b0;
             end else if (enable.CTR) begin
                 `ifdef FPGA 
-                    CTR_data.STDC <= data_i[0];
+                    CTR_data.STDC <= data_i[1];
+                    CTR_data.AKREQ <= data_i[0];
                 `else
-                    CTR_data.STDC <= data_io[0];
+                    CTR_data.STDC <= data_io[1];
+                    CTR_data.AKREQ <= data_io[0];
                 `endif
-            end 
-        end
-
-        always_comb begin 
-            if (CTR_data.STDC) begin 
-                set_std_config = 1'b0;
-                set_std_cfg_rst = 1'b1;
-            end else begin  
-                set_std_config = 1'b1;
-                set_std_cfg_rst = 1'b0;
-            end 
+            end else begin
+                CTR_data.STDC <= 1'b0;
+                CTR_data.AKREQ <= 1'b0;
+            end
         end
 
     assign tx_enable_o = CTR_data.COM[0];
     assign rx_enable_o = CTR_data.COM[1];
     assign enable_configuration_o = enable_config_req;
+    assign acknowledge_request_o = CTR_data.AKREQ;
 
 
 //----------------//
@@ -416,7 +408,6 @@ module configuration_registers (
     assign frame_error_en_o = ISR_data.FRM;
     assign tx_done_en_o = ISR_data.TXDONE;
     assign rx_rdy_en_o = ISR_data.RXRDY;
-    assign req_ackn_o = (ISR_data.INTID == INT_CONFIG_REQ) & int_ackn_i;
 
 
 //----------------//
@@ -527,18 +518,10 @@ module configuration_registers (
 //  DATA BUS  //
 //------------//
 
-    logic interrupt_edge;
-
-    edge_detector #(0) interrupt_request_negedge (
-        .clk_i        ( clk_i          ),
-        .signal_i     ( int_pending_i  ),
-        .edge_pulse_o ( interrupt_edge )
-    );
-
     logic [7:0] data; 
 
     always_comb begin
-        if (CTR_data.VECTORED & interrupt_edge & int_ackn_i) begin
+        if (CTR_data.VECTORED & !int_pending_i & int_ackn_i) begin
             data = UART_ISR_VECTOR;        
         end else begin
             data = data_register;

@@ -52,7 +52,8 @@ module transmitter (
     input  logic [7:0]   data_tx_i,             
     input  logic         tx_fifo_write_i,       
     input  logic         config_req_mst_i,      
-    input  logic         config_req_slv_i,      
+    input  logic         config_req_slv_i,   
+    input  logic         request_ack_i,   
     input  logic         tx_data_stream_mode_i, 
     input  logic [1:0]   data_width_i,          
     input  logic [1:0]   stop_bits_number_i,    
@@ -85,7 +86,7 @@ module transmitter (
         .empty_o   ( fifo_empty      )
     );
 
-    assign fifo_rst_n_i = rst_n_i | config_req_slv_i;
+    assign fifo_rst_n_i = rst_n_i | (config_req_slv_i & request_ack_i);
     assign tx_fifo_full_o = fifo_full;
 
 

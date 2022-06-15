@@ -65,6 +65,7 @@ module interrupt_arbiter (
     input  logic       tx_done_en_i,        
 
     /* Interrupt clear */
+    input  logic       request_ack_i,
     input  logic       int_ackn_i,      
     input  logic       read_rx_data_i,  
     input  logic       rx_fifo_empty_i, 
@@ -414,15 +415,23 @@ module interrupt_arbiter (
                     p3_reset[CFG_REQ] = 1'b0;
 
                     /* Clear interrupt */
-                    if (int_ackn_i) begin
-                        interrupt_clear = 1'b1;
-                        state_NXT = PRIO3_CLEAR;
+                    case (interrupt_vector)
+                        INT_CONFIG_REQ: begin 
+                            if (request_ack_i) begin
+                                p3_reset[CFG_REQ] = 1'b1;
+                                interrupt_clear = 1'b1;
+                                state_NXT = PRIO3_CLEAR;
+                            end
+                        end
 
-                        case (interrupt_vector)
-                            INT_CONFIG_REQ: p3_reset[CFG_REQ] = 1'b1;
-                            INT_TX_DONE: p3_reset[TX_DONE] = 1'b1;
-                        endcase
-                    end
+                        INT_TX_DONE: begin 
+                            if (int_ackn_i) begin
+                                p3_reset[TX_DONE] = 1'b1;
+                                interrupt_clear = 1'b1;
+                                state_NXT = PRIO3_CLEAR;
+                            end
+                        end
+                    endcase
                 end
 
 

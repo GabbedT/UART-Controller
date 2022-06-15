@@ -53,7 +53,7 @@ module receiver (
     input  logic         ov_baud_rt_i,          
     input  logic         rx_i,                  
     input  logic         rx_fifo_read_i,        
-    input  logic         req_ackn_i,            
+    input  logic         request_ack_i,            
     input  logic [5:0]   threshold_i,           
     input  logic         rx_data_stream_mode_i, 
     input  logic [1:0]   data_width_i,          
@@ -212,7 +212,7 @@ module receiver (
         always_ff @(posedge clk_i or negedge rst_n_i) begin 
             if (!rst_n_i) begin 
                 cfg_req_CRT <= 1'b0;
-            end else if (req_ackn_i) begin 
+            end else if (request_ack_i) begin 
                 cfg_req_CRT <= 1'b0;
             end else begin 
                 cfg_req_CRT <= cfg_req_NXT;
@@ -296,7 +296,7 @@ module receiver (
                         state_NXT = RX_IDLE;
 
                         /* Reset fifo only if the request is acknowledged */
-                        fifo_rst_n = !req_ackn_i;
+                        fifo_rst_n = !request_ack_i;
                     end
                 end
 

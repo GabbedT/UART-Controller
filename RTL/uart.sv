@@ -95,7 +95,6 @@ module uart (
     logic [7:0]   data_rx, data_TXR;
     logic         tx_done, req_done;
     logic         rx_fifo_empty, rx_fifo_read, tx_fifo_write, tx_fifo_full;
-    logic         config_request_acknowledged;
     logic         enable_configuration;
     logic         configuration_received, send_configuration;
     uart_config_s current_configuration, next_configuration, configuration_out;
@@ -107,6 +106,7 @@ module uart (
     logic         rx_read, tx_write;
     logic [7:0]   data_tx;
     logic         configuration_error, parity_error;
+    logic         acknowledge_request;
 
     control_unit controller (
         .clk_i                   ( clk_i                       ),
@@ -119,7 +119,7 @@ module uart (
         .rx_fifo_read_i          ( rx_read                     ),
         .tx_fifo_write_i         ( tx_write                    ),
         .tx_fifo_full_i          ( tx_fifo_full                ),
-        .request_ack_i           ( config_request_acknowledged ),
+        .request_ack_i           ( acknowledge_request         ),
         .enable_config_receive_i ( enable_configuration        ),
         .config_req_slv_i        ( configuration_received      ),
         .config_req_mst_i        ( send_configuration          ),
@@ -155,6 +155,7 @@ module uart (
         .tx_fifo_write_i       ( tx_fifo_write                     ),
         .config_req_mst_i      ( start_configuration               ),
         .config_req_slv_i      ( configuration_received            ),
+        .request_ack_i         ( acknowledge_request               ),
         .tx_data_stream_mode_i ( tx_data_stream_mode               ),
         .data_width_i          ( current_configuration.data_width  ),
         .stop_bits_number_i    ( current_configuration.stop_bits   ),
@@ -187,7 +188,7 @@ module uart (
         .ov_baud_rt_i          ( baud_rate_tick                    ),
         .rx_i                  ( rx_i                              ),
         .rx_fifo_read_i        ( rx_fifo_read                      ),
-        .req_ackn_i            ( config_request_acknowledged       ),
+        .request_ack_i         ( acknowledge_request               ),
         .threshold_i           ( threshold                         ),
         .rx_data_stream_mode_i ( rx_data_stream_mode               ),
         .data_width_i          ( current_configuration.data_width  ),
@@ -236,6 +237,7 @@ module uart (
         .frame_error_en_i      ( frame_error_interrupt_enable   ),
         .parity_error_en_i     ( parity_error_interrupt_enable  ),
         .rx_rdy_en_i           ( data_rx_ready_interrupt_enable ),
+        .request_ack_i         ( acknowledge_request            ),
         .int_ackn_i            ( int_ack                        ),
         .read_rx_data_i        ( rx_fifo_read                   ),
         .rx_fifo_empty_i       ( rx_fifo_empty                  ),
@@ -268,7 +270,6 @@ module uart (
         .tx_enable_o              ( tx_enable                         ),
         .rx_enable_o              ( rx_enable                         ),
         .int_ackn_i               ( int_ack                           ),
-        .req_ackn_o               ( config_request_acknowledged       ),
         .tx_done_en_o             ( tx_done_interrupt_enable          ),
         .STR_en_i                 ( enable_STR                        ),
         .set_std_config_i         ( set_std_configuration             ),
@@ -294,6 +295,7 @@ module uart (
         .int_pending_i            ( interrupt_request                 ),
         .enable_configuration_o   ( enable_configuration              ),
         .send_configuration_req_o ( send_configuration                ),
+        .acknowledge_request_o    ( acknowledge_request               ),
         .interrupt_vector_i       ( interrupt_vector                  ),
         .interrupt_vector_en_i    ( store_interrupt_vector            ),
         .rx_rdy_en_o              ( data_rx_ready_interrupt_enable    ),
