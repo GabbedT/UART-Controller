@@ -83,6 +83,7 @@
   | <ins>RST</ins> | Input   | Reset active low  |
   | CLK       | Input        | Clock        |
   | <ins>IREQ</ins> | Output  | Interrupt request active low  |
+  | IACK | Input  | Interrupt acknowledge
   | GND | Input              | Ground       | 
 
   
