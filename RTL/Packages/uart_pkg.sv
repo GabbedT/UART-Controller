@@ -1,3 +1,39 @@
+// MIT License
+//
+// Copyright (c) 2021 Gabriele Tripi
+// 
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+// 
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+// ------------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------
+// FILE NAME : uart_pkg.sv
+// AUTHOR : Gabriele Tripi
+// AUTHOR'S EMAIL : tripi.gabriele2002@gmail.com
+// ------------------------------------------------------------------------------------
+// RELEASE HISTORY
+// VERSION : 1.0 
+// DESCRIPTION : This package contains every parameter / type def used by the modules
+//               in this project. 
+// ------------------------------------------------------------------------------------
+// KEYWORDS : CONFIGURATION PARAMETERS, GENERAL UART PARAMETERS, REGISTERS DEFINITIONS 
+//            CONTROLLER UNIT, FSM DEFINITIONS
+// ------------------------------------------------------------------------------------
+
 `ifndef UART_PKG_INCLUDED
     `define UART_PKG_INCLUDED
 
@@ -20,6 +56,13 @@ package uart_pkg;
     /* Define ISR vector placed on the bus in 
      * vectored interrupt mode */
     localparam UART_ISR_VECTOR = 8'hFF;
+
+    /* FPGAs doesn't have a lot of tri-state buffers
+     * and the data bus is bidirectional in the top 
+     * module. Enable this define to enable the module
+     * to have two sets of pins (one for inputs and one
+     * for outputs). */
+//   `define FPGA 1;
 
 
 //===========================//
