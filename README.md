@@ -37,6 +37,7 @@
     - [Receiver Data Stream Mode](#receiver-data-stream-mode)
   - [Transmission](#transmission)
   - [Reception](#reception)
+- [References](#references)
 
 # Introduction
 
@@ -407,3 +408,11 @@ Data can be sent serially by writing it in the `TXR` register. *Once the transmi
   ## Reception  
 
 Once received and the device interrupted, the data can be retrieved through the `RXR` register, every time this operation occurs, the FIFO will write the next data into the register. This will happen until the FIFO is empty.
+
+  
+  
+# References
+  
+  S. Harutyunyan, T. Kaplanyan, A. Kirakosyan and A. Momjyan, "Design And Verification Of Autoconfigurable UART Controller," 2020 IEEE 40th International Conference on Electronics and Nanotechnology (ELNANO), 2020, pp. 347-350, doi: 10.1109/ELNANO50318.2020.9088789.
+  
+  Pong P. Chu (2018) FPGA Prototyping by Systemverilog Examples: Xilinx MicroBlaze MCS SoC Edition (2nd ed.) John Wiley & Sons Inc.
